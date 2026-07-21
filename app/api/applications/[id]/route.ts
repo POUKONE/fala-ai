@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { getD1 } from "../../../../db/d1";
 import { recordActivity } from "../../../../db/user-activity";
+import { enforceRateLimit, getAccountState } from "../../../../db/security";
 
 export const dynamic = "force-dynamic";
 const STATUSES = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
@@ -8,6 +9,8 @@ const STATUSES = ["À préparer","Envoyée","Entretien","Offre","Refusée","Arch
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  if ((await getAccountState(user.email))?.suspended_at) return Response.json({error:"Compte suspendu"},{status:403});
+  if (!await enforceRateLimit(user.email,"application-update",60,3600)) return Response.json({error:"Limite de modifications atteinte"},{status:429});
   const { id } = await context.params;
   const body = await request.json() as { status?: string; notes?: string; nextActionAt?: string; interviewAt?: string };
   if (body.status && !STATUSES.includes(body.status)) return Response.json({ error: "Statut invalide" }, { status: 400 });
@@ -26,6 +29,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
 export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  if ((await getAccountState(user.email))?.suspended_at) return Response.json({error:"Compte suspendu"},{status:403});
+  if (!await enforceRateLimit(user.email,"application-delete",20,3600)) return Response.json({error:"Limite de suppressions atteinte"},{status:429});
   const { id } = await context.params;
   const result = await getD1().prepare("DELETE FROM applications WHERE id = ? AND user_email = ?").bind(id,user.email).run();
   if (!result.meta.changes) return Response.json({ error: "Candidature introuvable" }, { status: 404 });

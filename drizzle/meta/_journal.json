@@ -15,6 +15,20 @@
       "when": 1784672421415,
       "tag": "0001_serious_princess_powerful",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784675385475,
+      "tag": "0002_romantic_jimmy_woo",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784677000000,
+      "tag": "0003_fala_auth",
+      "breakpoints": true
     }
   ]
 }

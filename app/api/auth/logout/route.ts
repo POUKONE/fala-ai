@@ -1,0 +1,2 @@
+import { cookies } from "next/headers"; import { getD1 } from "../../../../db/d1"; import { SESSION_COOKIE } from "../../../email-auth";
+export async function POST() { const token=(await cookies()).get(SESSION_COOKIE)?.value; if(token)await getD1().prepare("DELETE FROM auth_sessions WHERE token=?").bind(token).run(); const response=Response.json({ok:true}); response.headers.append("Set-Cookie",`${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`); return response; }

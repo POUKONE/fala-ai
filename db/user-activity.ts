@@ -1,9 +1,10 @@
 import type { ChatGPTUser } from "../app/chatgpt-auth";
 import { env } from "cloudflare:workers";
 import { getD1 } from "./d1";
+export { hasAdminAccess } from "./security";
 
 export function isPlatformAdmin(email: string) {
-  const configured = (String((env as unknown as Record<string, unknown>).ADMIN_EMAILS ?? ""))
+  const configured = (String((env as unknown as Record<string, unknown>).ADMIN_EMAILS ?? "ibrahimapoukone@gmail.com"))
     .split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
   return configured.includes(email.toLowerCase());
 }

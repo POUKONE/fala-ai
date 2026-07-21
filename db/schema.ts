@@ -5,7 +5,17 @@ export const users = sqliteTable("users", {
   displayName: text("display_name").notNull(),
   createdAt: text("created_at").notNull(),
   lastSeenAt: text("last_seen_at").notNull(),
+  consentVersion: text("consent_version"),
+  consentedAt: text("consented_at"),
+  suspendedAt: text("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  passwordHash: text("password_hash"),
+  emailVerifiedAt: text("email_verified_at"),
+  verificationToken: text("verification_token"),
+  resetToken: text("reset_token"),
+  resetTokenExpiresAt: text("reset_token_expires_at"),
 });
+export const authSessions = sqliteTable("auth_sessions", { token: text("token").primaryKey(), userEmail: text("user_email").notNull(), createdAt: text("created_at").notNull(), expiresAt: text("expires_at").notNull() });
 
 export const activityEvents = sqliteTable("activity_events", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -52,4 +62,36 @@ export const applications = sqliteTable("applications", {
   notes: text("notes").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
+});
+
+export const userRoles = sqliteTable("user_roles", {
+  userEmail: text("user_email").notNull(),
+  role: text("role").notNull(),
+  grantedBy: text("granted_by").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const reports = sqliteTable("reports", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userEmail: text("user_email").notNull(),
+  category: text("category").notNull(),
+  message: text("message").notNull(),
+  status: text("status").notNull().default("open"),
+  adminNote: text("admin_note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const systemErrors = sqliteTable("system_errors", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userEmail: text("user_email"),
+  route: text("route").notNull(),
+  message: text("message").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+export const rateLimits = sqliteTable("rate_limits", {
+  key: text("key").primaryKey(),
+  windowStart: text("window_start").notNull(),
+  count: integer("count").notNull().default(0),
 });

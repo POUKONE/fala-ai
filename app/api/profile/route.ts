@@ -2,12 +2,14 @@ import { getChatGPTUser } from "../../chatgpt-auth";
 import { getD1 } from "../../../db/d1";
 import { recordActivity, touchUser } from "../../../db/user-activity";
 import { calculateScore, type ScoringProfile } from "../../../db/scoring";
+import { enforceRateLimit, getAccountState } from "../../../db/security";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  if ((await getAccountState(user.email))?.suspended_at) return Response.json({error:"Compte suspendu"},{status:403});
   await touchUser(user);
   const row = await getD1().prepare("SELECT * FROM profiles WHERE user_email = ?").bind(user.email).first();
   return Response.json({ profile: row ?? null });
@@ -16,6 +18,8 @@ export async function GET() {
 export async function PUT(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  if ((await getAccountState(user.email))?.suspended_at) return Response.json({error:"Compte suspendu"},{status:403});
+  if (!await enforceRateLimit(user.email,"profile-update",20,3600)) return Response.json({error:"Limite de modifications atteinte"},{status:429});
   const email = user.email;
   const body = await request.json() as Record<string, unknown>;
   const value = (key: string) => String(body[key] ?? "").trim();
