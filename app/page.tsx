@@ -57,6 +57,7 @@ export default function Home() {
   const [selected,setSelected] = useState<Application|null>(null);
   const [saving,setSaving] = useState(false);
   const [toast,setToast] = useState("");
+  const [notificationsEnabled,setNotificationsEnabled] = useState(false);
 
   const notify = (message:string) => { setToast(message); window.setTimeout(()=>setToast(""),2600); };
 
@@ -77,6 +78,16 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
+
+  async function enableNotifications() {
+    if (!("Notification" in window)) { notify("Les notifications ne sont pas prises en charge par ce navigateur"); return; }
+    const permission = await Notification.requestPermission();
+    setNotificationsEnabled(permission === "granted");
+    if (permission === "granted") {
+      new Notification("Fala AI — rappels activés", { body: "Vous recevrez les échéances enregistrées dans vos candidatures." });
+      notify("Notifications navigateur activées");
+    } else notify("Autorisation de notifications refusée");
+  }
 
   const filtered = useMemo(()=>applications.filter((item)=>{
     const matchesQuery = `${item.company} ${item.role} ${item.location}`.toLowerCase().includes(query.toLowerCase());
@@ -215,7 +226,7 @@ export default function Home() {
 
     {modal==="report"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="report-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">!</span><h2 id="report-title">Signaler un problème</h2><p>Votre signalement sera visible dans le centre de contrôle administrateur.</p><form action={submitReport}><label>Catégorie<select name="category"><option>Problème technique</option><option>Données personnelles</option><option>Abus</option><option>Suggestion</option></select></label><label>Description<textarea name="message" rows={6} minLength={10} required/></label><div className="modal-actions"><button type="button" onClick={()=>setModal(null)}>Annuler</button><button className="primary" disabled={saving}>{saving?"Envoi…":"Envoyer"}</button></div></form></div></div>}
 
-    {modal==="notifications"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal reminders-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">♢</span><h2 id="reminders-title">Rappels et échéances</h2><p>Les échéances enregistrées dans vos candidatures sont affichées ici. Les e-mails nécessitent encore la connexion d’un service d’envoi.</p><div className="reminder-list">{reminders.map((item,index)=><button key={`${item.type}-${item.date}-${index}`} onClick={()=>{setSelected(item.application);setModal(null);}}><span>{item.type}</span><strong>{item.application.role} · {item.application.company}</strong><time>{formatDate(item.date)}</time></button>)}{!reminders.length&&<p>Aucune échéance programmée.</p>}</div></div></div>}
+    {modal==="notifications"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal reminders-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">♢</span><h2 id="reminders-title">Rappels et échéances</h2><p>Les échéances enregistrées sont affichées ici. Activez les notifications navigateur pour recevoir un rappel sur cet appareil.</p><button className="primary notification-enable" onClick={()=>void enableNotifications()} disabled={notificationsEnabled}>{notificationsEnabled?"✓ Notifications activées":"Activer les notifications"}</button><div className="reminder-list">{reminders.map((item,index)=><button key={`${item.type}-${item.date}-${index}`} onClick={()=>{setSelected(item.application);setModal(null);}}><span>{item.type}</span><strong>{item.application.role} · {item.application.company}</strong><time>{formatDate(item.date)}</time></button>)}{!reminders.length&&<p>Aucune échéance programmée.</p>}</div></div></div>}
 
     {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><div className="modal score-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setSelected(null)} aria-label="Fermer">×</button><div className="score-summary"><span className="score huge">{selected.score??"—"}<small>/100</small></span><div><span className="focus-label">{scoreLabel(selected.score)}</span><h2 id="detail-title">{selected.role}</h2><p>{selected.company} · {selected.location||"Localisation non précisée"}</p></div></div>{selected.score_breakdown&&<div className="score-bars">{Object.entries(JSON.parse(selected.score_breakdown) as Record<string,number>).map(([label,value])=><div key={label}><div><span>{scoreNames[label]??label}</span><b>{value} / {scoreMaximums[label]??10}</b></div><progress value={value} max={scoreMaximums[label]??10}/></div>)}</div>}<form action={updateApplication}><div className="form-grid"><label>Statut<select name="status" defaultValue={selected.status}>{statuses.map((s)=><option key={s}>{s}</option>)}</select></label><label>Prochaine action<input name="nextActionAt" type="datetime-local" defaultValue={selected.next_action_at?.slice(0,16)||""}/></label><label>Entretien<input name="interviewAt" type="datetime-local" defaultValue={selected.interview_at?.slice(0,16)||""}/></label><label className="span-2">Notes<textarea name="notes" rows={4} defaultValue={selected.notes}/></label></div><div className="modal-actions split-actions"><button type="button" className="danger-button" onClick={()=>void removeApplication()}>Supprimer</button><span/><button type="button" onClick={()=>setSelected(null)}>Fermer</button><button className="primary" disabled={saving}>{saving?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
     {toast&&<div className="toast" role="status"><span>✓</span>{toast}</div>}
