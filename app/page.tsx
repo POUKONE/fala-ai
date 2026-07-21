@@ -122,11 +122,11 @@ export default function Home() {
     setApplications((current)=>current.filter((a)=>a.id!==selected.id)); setSelected(null); notify("Candidature supprimée");
   }
 
-  if (!authChecked || loading) return <main className="public-shell"><div className="public-loader"><span className="brand-mark">J</span><p>Ouverture de JobTracker AI…</p></div></main>;
+  if (!authChecked || loading) return <main className="public-shell"><div className="public-loader"><span className="brand-mark">F</span><p>Ouverture de Fala AI…</p></div></main>;
 
   if (!currentUser) return <main className="public-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
-    <header className="public-nav"><div className="brand"><span className="brand-mark">J</span><span>JobTracker <b>AI</b></span></div><div className="public-auth-links"><a className="public-login" href="/signin-with-chatgpt?return_to=%2F">Connexion</a><a className="public-register" href="/signin-with-chatgpt?return_to=%2F">Créer un compte</a></div></header>
+    <header className="public-nav"><div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div><div className="public-auth-links"><a className="public-login" href="/signin-with-chatgpt?return_to=%2F">Connexion</a><a className="public-register" href="/signin-with-chatgpt?return_to=%2F">Créer un compte</a></div></header>
     <section className="public-hero"><div className="public-copy"><span className="public-kicker">SUIVI INTELLIGENT DES CANDIDATURES</span><h1>Votre recherche d’emploi.<br/><em>Enfin sous contrôle.</em></h1><p>Centralisez vos candidatures, calculez leur compatibilité et pilotez chaque prochaine action depuis un espace privé.</p><div className="public-actions"><a className="public-cta" href="/signin-with-chatgpt?return_to=%2F">Créer mon espace →</a><span>Identité vérifiée · Données isolées · Historique conservé</span></div></div><div className="public-orbit" aria-hidden="true"><div className="public-core"><span>94</span><small>MATCH</small></div><i className="orbit-card one">Candidature</i><i className="orbit-card two">Entretien</i><i className="orbit-card three">Offre</i></div></section>
     <section className="public-features"><article><span>01</span><h2>Pipeline vivant</h2><p>Liste, Kanban, statuts et échéances restent synchronisés avec vos données.</p></article><article><span>02</span><h2>Scoring explicable</h2><p>Chaque score s’appuie sur vos compétences, votre expérience et vos préférences.</p></article><article><span>03</span><h2>Suivi personnel</h2><p>Vos candidatures appartiennent uniquement à votre compte authentifié.</p></article></section>
   </main>;
@@ -134,7 +134,7 @@ export default function Home() {
   return <main className="app-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
     <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">J</span><span>JobTracker <b>AI</b></span></div>
+      <div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div>
       <nav aria-label="Navigation principale">
         <a className="nav-item active" href="#dashboard"><span className="icon">⌂</span>Vue d’ensemble</a>
         <a className="nav-item" href="#applications"><span className="icon">▱</span>Candidatures<span className="nav-badge">{applications.length}</span></a>
@@ -150,9 +150,9 @@ export default function Home() {
 
     <section className="content" id="dashboard">
       <header className="topbar">
-        <div className="mobile-brand"><span className="brand-mark">J</span> JobTracker AI</div>
+        <div className="mobile-brand"><span className="brand-mark">F</span> Fala AI</div>
         <label className="search"><span>⌕</span><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Rechercher dans vos candidatures…"/></label>
-        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="primary" onClick={()=>setModal("add")}>＋ Ajouter</button></div>
+        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="primary" onClick={()=>setModal("add")}>＋ Ajouter</button><details className="mobile-menu"><summary aria-label="Ouvrir le menu">•••</summary><div><a href="#dashboard">Vue d’ensemble</a><a href="#applications">Candidatures</a><a href="#analytics">Statistiques</a><button onClick={()=>setModal("profile")}>Profil de scoring</button>{isAdmin&&<a href="/admin">Administration</a>}<a href="/signout-with-chatgpt?return_to=%2F">Se déconnecter</a></div></details></div>
       </header>
 
       <div className="page-wrap">
@@ -179,7 +179,7 @@ export default function Home() {
           <article className="assistant-card"><span className="assistant-icon">✓</span><div><span className="focus-label">ÉTAT DU SYSTÈME</span><h3>{profile?"Scoring opérationnel":"Scoring en attente du profil"}</h3><p>{profile?"Chaque nouvelle candidature est comparée à votre profil et reçoit un détail pondéré sur 100.":"Complétez votre profil pour calculer des scores fondés sur vos critères réels."}</p><button onClick={()=>setModal("profile")}>{profile?"Mettre à jour mes critères":"Configurer le scoring"} →</button></div></article>
         </section>
         <section className="activity-card" id="activity"><div className="section-title"><div><h2>Votre historique d’activité</h2><p>Conservé dans votre espace personnel entre chaque connexion</p></div><span className="history-count">{activity.length}</span></div><div className="user-activity-list">{activity.slice(0,12).map((item,index)=><div key={`${item.created_at}-${index}`}><span className="activity-dot"/><div><strong>{item.description}</strong><small>{item.event_type}</small></div><time>{formatDate(item.created_at)}</time></div>)}{!activity.length&&<p className="admin-empty">Votre historique apparaîtra ici après vos premières actions.</p>}</div></section>
-        <footer><span>JobTracker AI · Accès privé et données isolées par utilisateur</span><span><i/> Stockage persistant actif</span></footer>
+        <footer><span>Fala AI · Accès privé et données isolées par utilisateur</span><span><i/> Stockage persistant actif</span></footer>
       </div>
     </section>
 
