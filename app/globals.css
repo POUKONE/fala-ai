@@ -4,7 +4,7 @@
 * { box-sizing:border-box; }
 html { scroll-behavior:smooth; }
 body { margin:0; background:var(--canvas); color:var(--ink); font-family:Arial, Helvetica, sans-serif; }
-button, input { font:inherit; }
+button, input, select, textarea { font:inherit; }
 button, a { -webkit-tap-highlight-color:transparent; }
 button { cursor:pointer; }
 .app-shell { min-height:100vh; display:flex; position:relative; isolation:isolate; overflow:hidden; }
@@ -116,3 +116,34 @@ footer { padding:25px 2px 5px; display:flex; justify-content:space-between; colo
 @media (max-width:760px) { .sidebar { display:none; }.content { margin:0; width:100%; }.topbar { height:auto; padding:12px 18px; flex-wrap:wrap; gap:10px; }.mobile-brand { display:flex; align-items:center; gap:7px; font-size:13px; font-weight:800; }.mobile-brand .brand-mark { width:27px; height:27px; }.search { order:3; width:100%; }.live { display:none; }.page-wrap { padding:24px 18px; }.welcome-row { align-items:flex-start; }.welcome-row .ghost-button { display:none; } h1 { font-size:25px; }.focus-card { padding:26px; }.time-orbit { display:none; }.metric-grid { grid-template-columns:1fr 1fr; }.offer-grid { grid-template-columns:1fr; }.offer-card:last-child { display:block; }.section-title .spark { display:none; }.applications-title { align-items:flex-end; }.insight-row { grid-template-columns:1fr; }.kanban { grid-template-columns:repeat(4,210px); } }
 @media (max-width:480px) { .top-actions .icon-button { display:none; }.primary { padding:10px 13px; }.metric-grid { grid-template-columns:1fr; }.focus-card h2 { font-size:19px; }.focus-actions { align-items:flex-start; flex-direction:column; gap:12px; }.offer-grid { gap:10px; }.insight-row { margin-top:20px; } footer { flex-direction:column; gap:8px; }.modal { padding:24px; }.score-summary { align-items:flex-start; flex-direction:column; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation:none!important; transition:none!important; } }
+
+/* Operational product states */
+.error-banner { margin-bottom:18px; padding:12px 15px; display:flex; justify-content:space-between; align-items:center; border:1px solid #f2b6aa; border-radius:10px; color:#9d3e2e; background:#fff0ed; font-size:11px; font-weight:700; }
+.error-banner button { border:0; background:transparent; color:inherit; font-size:18px; }
+.setup-card { margin-bottom:18px; }
+.table-button { width:100%; padding:0; border:0; color:inherit; background:transparent; text-align:left; }
+.kanban-card { width:100%; margin-bottom:8px; padding:12px; display:grid; grid-template-columns:32px 1fr; gap:2px 9px; border:0; border-radius:9px; color:inherit; background:white; text-align:left; box-shadow:0 2px 7px #2825340c; transition:transform .14s ease; }
+.kanban-card:hover { transform:translateY(-2px); }
+.kanban-card .company-logo { grid-row:1/3; }
+.kanban-card strong { font-size:9px; }
+.kanban-card small { color:#8e8f99; font-size:8px; }
+.kanban-card div:last-child { grid-column:1/3; display:flex; justify-content:space-between; align-items:center; margin-top:8px; color:#8b8c95; font-size:7px; }
+.state-panel { min-height:190px; display:grid; place-items:center; padding:30px; border:1px solid var(--line); border-radius:13px; color:#8c8d98; background:white; font-size:11px; }
+.empty-state { text-align:center; align-content:center; gap:8px; }
+.empty-state > span { width:42px; height:42px; display:grid; place-items:center; margin:auto; border-radius:12px; color:var(--purple); background:var(--purple-soft); font-size:22px; }
+.empty-state h3 { margin:3px 0 0; color:var(--ink); font-size:15px; }
+.empty-state p { margin:0 0 8px; }
+.status-bars { display:grid; gap:11px; margin-top:18px; }
+.status-bars > div { display:grid; grid-template-columns:85px 1fr 18px; align-items:center; gap:10px; font-size:8px; }
+.status-bars > div > div { height:7px; overflow:hidden; border-radius:5px; background:#eeeef2; }
+.status-bars i { display:block; height:100%; border-radius:5px; background:linear-gradient(90deg,var(--purple),#a795ff); }
+.status-bars b { text-align:right; }
+.modal input,.modal select,.modal textarea { width:100%; min-height:42px; padding:0 12px; border:1px solid var(--line); outline:0; border-radius:9px; color:var(--ink); background:white; font-size:11px; }
+.modal textarea { padding:10px 12px; resize:vertical; }
+.modal input:focus,.modal select:focus,.modal textarea:focus { border-color:#a89bf4; box-shadow:0 0 0 3px #6a52e812; }
+.wide-modal { width:min(720px,100%); max-height:calc(100vh - 40px); overflow:auto; }
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:13px; }
+.span-2 { grid-column:1/3; }
+.split-actions { display:grid; grid-template-columns:auto 1fr auto auto; }
+.danger-button { color:#b44635!important; background:#fff0ed!important; }
+@media (max-width:480px) { .form-grid { grid-template-columns:1fr; }.span-2 { grid-column:auto; }.split-actions { display:flex; flex-wrap:wrap; }.split-actions span { display:none; } }
