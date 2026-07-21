@@ -1,5 +1,20 @@
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
+export const users = sqliteTable("users", {
+  email: text("email").primaryKey(),
+  displayName: text("display_name").notNull(),
+  createdAt: text("created_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+});
+
+export const activityEvents = sqliteTable("activity_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  userEmail: text("user_email").notNull(),
+  eventType: text("event_type").notNull(),
+  description: text("description").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
 export const profiles = sqliteTable("profiles", {
   userEmail: text("user_email").primaryKey(),
   targetTitle: text("target_title").notNull().default(""),

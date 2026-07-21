@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getD1 } from "../../../db/d1";
+import { recordActivity, touchUser } from "../../../db/user-activity";
 
 export const dynamic = "force-dynamic";
 
@@ -33,21 +34,18 @@ function calculateScore(profile: ProfileRow | null, body: Record<string, unknown
   return { score: Object.values(breakdown).reduce((sum, value) => sum + value, 0), breakdown };
 }
 
-async function emailOr401() {
-  const user = await getChatGPTUser();
-  return user?.email ?? null;
-}
-
 export async function GET() {
-  const email = await emailOr401();
-  if (!email) return Response.json({ error: "Authentification requise" }, { status: 401 });
-  const result = await getD1().prepare("SELECT * FROM applications WHERE user_email = ? ORDER BY updated_at DESC, id DESC").bind(email).all();
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  await touchUser(user);
+  const result = await getD1().prepare("SELECT * FROM applications WHERE user_email = ? ORDER BY updated_at DESC, id DESC").bind(user.email).all();
   return Response.json({ applications: result.results });
 }
 
 export async function POST(request: Request) {
-  const email = await emailOr401();
-  if (!email) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  const user = await getChatGPTUser();
+  if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
+  const email = user.email;
   const body = await request.json() as Record<string, unknown>;
   const text = (key: string) => String(body[key] ?? "").trim();
   if (!text("company") || !text("role")) return Response.json({ error: "Entreprise et poste requis" }, { status: 400 });
@@ -59,5 +57,6 @@ export async function POST(request: Request) {
     (user_email,company,role,location,contract_type,source,required_skills,experience_required,education_required,languages,sector,salary_min,status,applied_at,next_action_at,interview_at,score,score_breakdown,notes,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING *`)
     .bind(email,text("company"),text("role"),text("location"),text("contractType"),text("source") || "Ajout manuel",text("requiredSkills"),text("experienceRequired"),text("educationRequired"),text("languages"),text("sector"),Math.max(0,Number(body.salaryMin ?? 0)||0),status,text("appliedAt")||null,text("nextActionAt")||null,text("interviewAt")||null,assessment.score,assessment.breakdown ? JSON.stringify(assessment.breakdown) : null,text("notes"),now,now).first();
+  await recordActivity(user,"application.created",`${text("role")} · ${text("company")}`);
   return Response.json({ application: result }, { status: 201 });
 }

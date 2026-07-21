@@ -32,6 +32,9 @@ function scoreLabel(score:number|null) {
 }
 
 export default function Home() {
+  const [currentUser,setCurrentUser] = useState<{displayName:string;email:string}|null>(null);
+  const [isAdmin,setIsAdmin] = useState(false);
+  const [authChecked,setAuthChecked] = useState(false);
   const [applications,setApplications] = useState<Application[]>([]);
   const [profile,setProfile] = useState<Profile|null>(null);
   const [loading,setLoading] = useState(true);
@@ -49,6 +52,10 @@ export default function Home() {
   const loadData = useCallback(async () => {
     setError("");
     try {
+      const meResponse = await fetch("/api/me",{cache:"no-store"});
+      const meData = await meResponse.json();
+      setCurrentUser(meData.user ?? null); setIsAdmin(Boolean(meData.isAdmin)); setAuthChecked(true);
+      if (!meData.user) { setApplications([]); setProfile(null); return; }
       const [appsResponse,profileResponse] = await Promise.all([fetch("/api/applications",{cache:"no-store"}),fetch("/api/profile",{cache:"no-store"})]);
       if (!appsResponse.ok || !profileResponse.ok) throw new Error(appsResponse.status===401?"Votre session a expiré. Reconnectez-vous à ChatGPT.":"Impossible de charger vos données.");
       const appsData = await appsResponse.json(); const profileData = await profileResponse.json();
@@ -108,6 +115,15 @@ export default function Home() {
     setApplications((current)=>current.filter((a)=>a.id!==selected.id)); setSelected(null); notify("Candidature supprimée");
   }
 
+  if (!authChecked || loading) return <main className="public-shell"><div className="public-loader"><span className="brand-mark">J</span><p>Ouverture de JobTracker AI…</p></div></main>;
+
+  if (!currentUser) return <main className="public-shell">
+    <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
+    <header className="public-nav"><div className="brand"><span className="brand-mark">J</span><span>JobTracker <b>AI</b></span></div><a className="public-login" href="/signin-with-chatgpt?return_to=%2F">Connexion</a></header>
+    <section className="public-hero"><div className="public-copy"><span className="public-kicker">NEUROPATH JOB OPERATING SYSTEM</span><h1>Votre recherche d’emploi.<br/><em>Enfin sous contrôle.</em></h1><p>Centralisez vos candidatures, calculez leur compatibilité et pilotez chaque prochaine action depuis un espace privé.</p><div className="public-actions"><a className="public-cta" href="/signin-with-chatgpt?return_to=%2F">Créer mon espace avec ChatGPT →</a><span>Compte personnel · Données isolées · Accès sécurisé</span></div></div><div className="public-orbit" aria-hidden="true"><div className="public-core"><span>94</span><small>MATCH</small></div><i className="orbit-card one">Candidature</i><i className="orbit-card two">Entretien</i><i className="orbit-card three">Offre</i></div></section>
+    <section className="public-features"><article><span>01</span><h2>Pipeline vivant</h2><p>Liste, Kanban, statuts et échéances restent synchronisés avec vos données.</p></article><article><span>02</span><h2>Scoring explicable</h2><p>Chaque score s’appuie sur vos compétences, votre expérience et vos préférences.</p></article><article><span>03</span><h2>Suivi personnel</h2><p>Vos candidatures appartiennent uniquement à votre compte authentifié.</p></article></section>
+  </main>;
+
   return <main className="app-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
     <aside className="sidebar">
@@ -116,6 +132,7 @@ export default function Home() {
         <a className="nav-item active" href="#dashboard"><span className="icon">⌂</span>Vue d’ensemble</a>
         <a className="nav-item" href="#applications"><span className="icon">▱</span>Candidatures<span className="nav-badge">{applications.length}</span></a>
         <a className="nav-item" href="#analytics"><span className="icon">↗</span>Statistiques</a>
+        {isAdmin&&<a className="nav-item admin-link" href="/admin"><span className="icon">◈</span>Administration</a>}
       </nav>
       <div className="sidebar-bottom">
         <button className="nav-item sync-button" onClick={()=>void loadData()}><span className="icon">↻</span>Actualiser les données<span className="status-dot"/></button>
@@ -128,7 +145,7 @@ export default function Home() {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark">J</span> JobTracker AI</div>
         <label className="search"><span>⌕</span><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Rechercher dans vos candidatures…"/></label>
-        <div className="top-actions"><span className="live"><i/>Données persistantes</span><button className="primary" onClick={()=>setModal("add")}>＋ Ajouter</button></div>
+        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="primary" onClick={()=>setModal("add")}>＋ Ajouter</button></div>
       </header>
 
       <div className="page-wrap">

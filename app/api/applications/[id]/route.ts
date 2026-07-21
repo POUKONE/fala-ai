@@ -1,5 +1,6 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { getD1 } from "../../../../db/d1";
+import { recordActivity } from "../../../../db/user-activity";
 
 export const dynamic = "force-dynamic";
 const STATUSES = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
@@ -18,6 +19,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const interviewAt = body.interviewAt === undefined ? current.interview_at : body.interviewAt || null;
   const updated = await getD1().prepare("UPDATE applications SET status=?, notes=?, next_action_at=?, interview_at=?, updated_at=? WHERE id=? AND user_email=? RETURNING *")
     .bind(status,notes,nextActionAt,interviewAt,new Date().toISOString(),id,user.email).first();
+  await recordActivity(user,"application.updated",`${String(current.role)} · ${String(current.company)} · ${status}`);
   return Response.json({ application: updated });
 }
 
@@ -27,5 +29,6 @@ export async function DELETE(_request: Request, context: { params: Promise<{ id:
   const { id } = await context.params;
   const result = await getD1().prepare("DELETE FROM applications WHERE id = ? AND user_email = ?").bind(id,user.email).run();
   if (!result.meta.changes) return Response.json({ error: "Candidature introuvable" }, { status: 404 });
+  await recordActivity(user,"application.deleted",`Candidature #${id} supprimée`);
   return Response.json({ ok: true });
 }
