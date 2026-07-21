@@ -1,6 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getD1 } from "../../../db/d1";
 import { recordActivity, touchUser } from "../../../db/user-activity";
+import { calculateScore, type ScoringProfile } from "../../../db/scoring";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,19 @@ export async function PUT(request: Request) {
     education_level=excluded.education_level,languages=excluded.languages,sectors=excluded.sectors,
     salary_min=excluded.salary_min,updated_at=excluded.updated_at`)
     .bind(email,value("targetTitle"),value("location"),value("contractType"),value("skills"),value("experienceLevel"),value("educationLevel"),value("languages"),value("sectors"),salaryMin,now).run();
+  const profile: ScoringProfile = {
+    target_title:value("targetTitle"), location:value("location"), contract_type:value("contractType"),
+    skills:value("skills"), experience_level:value("experienceLevel"), education_level:value("educationLevel"),
+    languages:value("languages"), sectors:value("sectors"), salary_min:salaryMin,
+  };
+  const existing = await getD1().prepare("SELECT * FROM applications WHERE user_email = ?").bind(email).all<Record<string, unknown>>();
+  if (existing.results.length) {
+    await getD1().batch(existing.results.map((application) => {
+      const assessment = calculateScore(profile, application);
+      return getD1().prepare("UPDATE applications SET score=?, score_breakdown=?, updated_at=? WHERE id=? AND user_email=?")
+        .bind(assessment.score, assessment.breakdown ? JSON.stringify(assessment.breakdown) : null, now, application.id, email);
+    }));
+  }
   await recordActivity(user,"profile.updated","Profil de scoring mis à jour");
-  return Response.json({ ok: true });
+  return Response.json({ ok: true, recalculated: existing.results.length });
 }
