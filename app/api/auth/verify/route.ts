@@ -1,2 +1,0 @@
-import { getD1 } from "../../../../db/d1";
-export async function POST(request:Request){const {token}=await request.json() as {token?:string}; if(!token)return Response.json({error:"Token requis"},{status:400}); const r=await getD1().prepare("UPDATE users SET email_verified_at=?,verification_token=NULL WHERE verification_token=? RETURNING email").bind(new Date().toISOString(),token).first(); return r?Response.json({ok:true}):Response.json({error:"Token invalide ou expiré"},{status:400});}

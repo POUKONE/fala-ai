@@ -1,6 +1,5 @@
 import { getD1 } from "../../../../db/d1";
 import { CONSENT_VERSION } from "../../../../db/security";
-import { sendTransactionalMail } from "../../../../db/mailer";
 import { createSession, hashPassword, SESSION_COOKIE } from "../../../email-auth";
 
 export const dynamic = "force-dynamic";
@@ -15,12 +14,10 @@ export async function POST(request: Request) {
   const db = getD1();
   if (await db.prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(email).first()) return Response.json({ error: "Cette adresse est déjà inscrite" }, { status: 409 });
   const now = new Date().toISOString();
-  const token = crypto.randomUUID();
-  await db.prepare("INSERT INTO users (email,display_name,created_at,last_seen_at,password_hash,verification_token,consent_version,consented_at) VALUES (?,?,?,?,?,?,?,?)")
-    .bind(email, name, now, now, await hashPassword(password), token, CONSENT_VERSION, now).run();
-  void sendTransactionalMail({ to: email, subject: "Vérifiez votre adresse Fala AI", html: `<p>Bienvenue sur Fala AI.</p><p><a href="${new URL(`/auth/verify?token=${encodeURIComponent(token)}`, request.url)}">Vérifier mon adresse e-mail</a></p>` }).catch(() => {});
+  await db.prepare("INSERT INTO users (email,display_name,created_at,last_seen_at,password_hash,consent_version,consented_at) VALUES (?,?,?,?,?,?,?)")
+    .bind(email, name, now, now, await hashPassword(password), CONSENT_VERSION, now).run();
   const session = await createSession(email);
-  const response = Response.json({ ok: true, user: { email, displayName: name }, emailVerificationRequired: true, message: "Votre compte est créé. Vérifiez votre adresse e-mail pour finaliser l’activation." });
+  const response = Response.json({ ok: true, user: { email, displayName: name }, message: "Votre compte Fala AI est créé." });
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
   return response;
 }

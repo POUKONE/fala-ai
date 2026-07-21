@@ -32,7 +32,6 @@ export default function AuthPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Impossible de traiter la demande.");
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
-      else if (data.requiresVerification || data.emailVerificationRequired) { setMessage(data.message || "Vérifiez votre adresse e-mail pour activer votre compte."); }
       else if (mode === "reset") { setMessage("Mot de passe modifié. Vous pouvez vous connecter."); switchMode("login"); }
       else { router.push("/"); router.refresh(); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Une erreur est survenue."); }
@@ -58,7 +57,6 @@ export default function AuthPage() {
         </form>
         {mode === "login" && <button className="auth-forgot" onClick={() => switchMode("forgot")}>Mot de passe oublié ?</button>}
         {mode === "forgot" && <button className="auth-forgot" onClick={() => switchMode("login")}>Retour à la connexion</button>}
-        <div className="auth-divider"><span>ou</span></div><a className="auth-chatgpt" href="/signin-with-chatgpt?return_to=%2F">Continuer avec ChatGPT</a>
       </div>
     </section>
     <footer className="auth-footer"><span>Fala AI · Données privées et contrôle utilisateur</span><span><Link href="/privacy">Confidentialité</Link><Link href="/terms">Conditions</Link></span></footer>
