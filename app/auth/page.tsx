@@ -10,7 +10,9 @@ export default function AuthPage() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : params.get("mode") === "reset" ? "reset" : "login");
-  const [resetToken] = useState(params.get("token") ?? "");
+  // Read the token from the current URL on every render. Keeping it in state
+  // can leave it empty after the browser hydrates a password-reset link.
+  const resetToken = params.get("token") ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -32,7 +34,7 @@ export default function AuthPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Impossible de traiter la demande.");
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
-      else if (mode === "reset") { setMessage("Mot de passe modifié. Vous pouvez vous connecter."); switchMode("login"); }
+      else if (mode === "reset") { setMode("login"); setMessage("Mot de passe modifié. Vous pouvez vous connecter."); }
       else { router.push("/"); router.refresh(); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Une erreur est survenue."); }
     finally { setBusy(false); }
@@ -50,7 +52,7 @@ export default function AuthPage() {
         {error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}
         <form onSubmit={submit}>
           {mode === "register" && <label>Nom affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required /></label>}
-          <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
+          {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>}
           {mode !== "forgot" && <label>Mot de passe<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === "register" || mode === "reset" ? "new-password" : "current-password"} required /><small>8 caractères minimum</small></label>}
           {mode === "register" && <label className="auth-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />J’accepte la <Link href="/privacy" target="_blank">politique de confidentialité</Link> et les <Link href="/terms" target="_blank">conditions d’utilisation</Link>.</label>}
           <button className="auth-submit" disabled={busy}>{busy ? "Veuillez patienter…" : mode === "register" ? "Créer mon compte" : mode === "forgot" ? "Envoyer le lien" : "Se connecter"}</button>
