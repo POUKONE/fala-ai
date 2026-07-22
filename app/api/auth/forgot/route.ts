@@ -9,7 +9,10 @@ export async function POST(request: Request) {
   const value = String(email ?? "").trim().toLowerCase();
   const generic = { ok: true, message: "Si cette adresse existe, un lien de récupération sera envoyé." };
   if (!/^\S+@\S+\.\S+$/.test(value)) return Response.json(generic);
-  if (!await enforceRateLimit(value, "password-reset", 3, 3600)) return Response.json({ error: "Trop de demandes" }, { status: 429 });
+  // Five requests per 15 minutes is enough for normal retries while keeping
+  // automated abuse contained. The v2 key also avoids locking users who were
+  // caught by the previous one-hour window during the initial rollout.
+  if (!await enforceRateLimit(value, "password-reset-v2", 5, 900)) return Response.json({ error: "Trop de demandes. Réessayez dans quelques minutes." }, { status: 429 });
   const token = crypto.randomUUID();
   const account = await getD1().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
   if (account) {
