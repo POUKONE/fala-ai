@@ -14,7 +14,8 @@ export async function POST(request: Request) {
   const account = await getD1().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
   if (account) {
     await getD1().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(token, new Date(Date.now() + 3600000).toISOString(), value).run();
-    void sendTransactionalMail({ to: value, subject: "Récupérer votre accès Fala AI", html: `<p><a href="${new URL(`/auth?mode=reset&token=${encodeURIComponent(token)}`, request.url)}">Réinitialiser mon mot de passe</a></p>` }).catch(() => {});
+    const delivery = await sendTransactionalMail({ to: value, subject: "Récupérer votre accès Fala AI", html: `<p><a href="${new URL(`/auth?mode=reset&token=${encodeURIComponent(token)}`, request.url)}">Réinitialiser mon mot de passe</a></p>` });
+    if (!delivery.configured) return Response.json({ error: "La récupération par e-mail n’est pas encore configurée. L’administrateur doit connecter un service d’e-mail transactionnel." }, { status: 503 });
   }
   return Response.json(generic);
 }
