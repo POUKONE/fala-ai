@@ -2,6 +2,7 @@ import { getChatGPTUser } from "../../../chatgpt-auth";
 import { getD1 } from "../../../../db/d1";
 import { touchUser } from "../../../../db/user-activity";
 import { applyRetentionPolicy, hasAdminAccess } from "../../../../db/security";
+import { createDailyBackup } from "../../../../db/backup";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +12,7 @@ export async function GET() {
   if (!await hasAdminAccess(user.email)) return Response.json({ error:"Accès administrateur requis" },{status:403});
   await touchUser(user);
   await applyRetentionPolicy();
+  void createDailyBackup().catch(() => {});
   const db = getD1();
   const [users,active,applications,recentApps,statuses,recentUsers,activity,reports,errors,roles] = await Promise.all([
     db.prepare("SELECT COUNT(*) AS count FROM users").first<{count:number}>(),
