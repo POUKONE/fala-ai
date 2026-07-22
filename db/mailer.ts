@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 type Mail = { to: string; subject: string; html: string };
 
-/** Sends through Resend when configured; otherwise leaves the app usable. */
+/** Sends transactional Fala AI messages through Resend when configured. */
 export async function sendTransactionalMail(mail: Mail) {
   const runtime = env as unknown as Record<string, unknown>;
   const apiKey = String(runtime.RESEND_API_KEY ?? "").trim();
