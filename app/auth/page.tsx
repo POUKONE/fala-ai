@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -13,6 +13,8 @@ export default function AuthPage() {
   // Read the token from the current URL on every render. Keeping it in state
   // can leave it empty after the browser hydrates a password-reset link.
   const resetToken = params.get("token") ?? "";
+  const [supabaseRecoveryToken, setSupabaseRecoveryToken] = useState("");
+  useEffect(() => { const hash = new URLSearchParams(window.location.hash.replace(/^#/, "")); const token = hash.get("access_token") ?? ""; if (token && hash.get("type") === "recovery") { setSupabaseRecoveryToken(token); setMode("reset"); window.history.replaceState({}, "", `${window.location.pathname}?mode=reset`); } }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -28,7 +30,7 @@ export default function AuthPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     const endpoint = mode === "register" ? "/api/auth/register" : mode === "forgot" ? "/api/auth/forgot" : mode === "reset" ? "/api/auth/reset-password" : "/api/auth/login";
-    const body = mode === "register" ? { email, password, displayName: name, consent } : mode === "reset" ? { token: resetToken, password } : { email, password };
+    const body = mode === "register" ? { email, password, displayName: name, consent } : mode === "reset" ? { token: resetToken, accessToken: supabaseRecoveryToken, password } : { email, password };
     try {
       const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json().catch(() => ({}));

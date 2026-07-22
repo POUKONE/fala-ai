@@ -1,6 +1,7 @@
 import { getD1 } from "../../../../db/d1";
 import { enforceRateLimit } from "../../../../db/security";
 import { sendTransactionalMail } from "../../../../db/mailer";
+import { supabaseResetPassword } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
   // automated abuse contained. The v2 key also avoids locking users who were
   // caught by the previous one-hour window during the initial rollout.
   if (!await enforceRateLimit(value, "password-reset-v2", 5, 900)) return Response.json({ error: "Trop de demandes. Réessayez dans quelques minutes." }, { status: 429 });
+  try { await supabaseResetPassword(value, new URL("/auth?mode=reset", request.url).toString()); } catch { /* Keep the response generic. */ }
   const token = crypto.randomUUID();
   const account = await getD1().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
   if (account) {
