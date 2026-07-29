@@ -11,7 +11,13 @@ async function adaptWithQwen(offer: string, cv: string) {
   if (!base) return null;
   const model = String(process.env.AI_MODEL ?? "Qwen/Qwen3-8B").trim();
   const apiKey = String(process.env.AI_API_KEY ?? "").trim();
-  const response = await fetch(`${base}/v1/chat/completions`, { method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.15, max_tokens:3000, messages:[{role:"system",content:"Tu es un assistant de recrutement. Réorganise un CV pour les ATS en français. Utilise exclusivement les faits présents dans le CV : n’invente jamais de poste, diplôme, compétence, date ou résultat. Retourne uniquement le CV final en texte brut, avec les sections PROFIL CIBLE, COMPÉTENCES, EXPÉRIENCE, FORMATION et AUTRES INFORMATIONS."},{role:"user",content:`OFFRE D'EMPLOI:\n${offer}\n\nCV À RESTRUCTURER:\n${cv}`} ]}) });
+  const endpoint = `${base}${base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions"}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  let response:Response;
+  try {
+    response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.15, max_tokens:3000, messages:[{role:"system",content:"Tu es un assistant de recrutement. Réorganise un CV pour les ATS en français. Utilise exclusivement les faits présents dans le CV : n’invente jamais de poste, diplôme, compétence, date ou résultat. Retourne uniquement le CV final en texte brut, avec les sections PROFIL CIBLE, COMPÉTENCES, EXPÉRIENCE, FORMATION et AUTRES INFORMATIONS."},{role:"user",content:`OFFRE D'EMPLOI:\n${offer}\n\nCV À RESTRUCTURER:\n${cv}`} ]}) });
+  } finally { clearTimeout(timeout); }
   if (!response.ok) return null;
   const data = await response.json().catch(() => ({})) as {choices?:Array<{message?:{content?:string}}>};
   const content = String(data.choices?.[0]?.message?.content ?? "").replace(/^```(?:text|markdown)?\s*/i, "").replace(/\s*```$/i, "").trim();

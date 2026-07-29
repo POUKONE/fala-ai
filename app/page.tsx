@@ -212,12 +212,20 @@ export default function Home() {
   }
 
   async function adaptCvToOffer() {
-    setAdaptingCv(true); setError("");
-    const response = await fetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
-    const body = await response.json().catch(() => ({}));
-    setAdaptingCv(false);
-    if (!response.ok) { setError(body.error ?? "Adaptation du CV impossible"); return; }
-    setAdaptedCv(String(body.adaptedCv ?? "")); notify("CV restructuré pour une lecture ATS");
+    if (offerText.trim().length < 40 || cvText.trim().length < 80) {
+      setError("Ajoutez au moins 40 caractères d’annonce et 80 caractères de CV avant de lancer la restructuration.");
+      return;
+    }
+    setAdaptingCv(true); setError(""); setAdaptedCv("");
+    try {
+      const response = await fetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) { setError(body.error ?? "Adaptation du CV impossible"); return; }
+      const result = String(body.adaptedCv ?? "").trim();
+      if (!result) { setError("Aucun contenu n’a été généré. Vérifiez le texte de l’annonce et du CV."); return; }
+      setAdaptedCv(result); notify(body.provider === "moteur local" ? "CV restructuré avec le moteur intégré" : "CV restructuré avec l’assistant IA");
+    } catch { setError("Le service d’analyse est momentanément indisponible. Vérifiez votre connexion puis réessayez."); }
+    finally { setAdaptingCv(false); }
   }
 
   const filtered = useMemo(()=>applications.filter((item)=>{
