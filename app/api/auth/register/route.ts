@@ -14,10 +14,12 @@ export async function POST(request: Request) {
   if (!body.consent) return Response.json({ error: "Votre consentement est requis pour créer le compte" }, { status: 400 });
   const db = getD1();
   if (await db.prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(email).first()) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 });
-  try { await supabaseSignUp(email, password, name); } catch (error) { const message = error instanceof Error ? error.message : "Impossible de créer le compte"; if (/already|registered|exists|occup/i.test(message)) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 }); return Response.json({ error: message }, { status: 400 }); }
+  let authResult;
+  try { authResult = await supabaseSignUp(email, password, name); } catch (error) { const message = error instanceof Error ? error.message : "Impossible de créer le compte"; if (/already|registered|exists|occup/i.test(message)) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 }); return Response.json({ error: message }, { status: 400 }); }
   const now = new Date().toISOString();
   await db.prepare("INSERT INTO users (email,display_name,created_at,last_seen_at,password_hash,consent_version,consented_at) VALUES (?,?,?,?,?,?,?)")
     .bind(email, name, now, now, "supabase", CONSENT_VERSION, now).run();
+  if (!authResult.access_token) return Response.json({ ok: true, requiresEmailConfirmation: true, user: { email, displayName: name }, message: "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter." });
   const session = await createSession(email);
   const response = Response.json({ ok: true, user: { email, displayName: name }, message: "Votre compte Fala AI est créé." });
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);

@@ -37,6 +37,7 @@ export default function AuthPage() {
       if (!response.ok) throw new Error(data.error || "Impossible de traiter la demande.");
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
       else if (mode === "reset") { setMode("login"); setMessage("Mot de passe modifié. Vous pouvez vous connecter."); }
+      else if (mode === "register" && data.requiresEmailConfirmation) { setMode("login"); setMessage(data.message || "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter."); }
       else { router.push("/"); router.refresh(); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Une erreur est survenue."); }
     finally { setBusy(false); }
