@@ -26,7 +26,14 @@ export async function getAccountState(email: string) {
 export async function enforceRateLimit(identity: string, action: string, limit = 30, windowSeconds = 60) {
   const db = getD1();
   const key = `${identity.toLowerCase()}:${action}`;
-  const current = await db.prepare("SELECT window_start,count FROM rate_limits WHERE key=?").bind(key).first<{window_start:string;count:number}>();
+  let current: {window_start:string;count:number} | null;
+  try {
+    current = await db.prepare("SELECT window_start,count FROM rate_limits WHERE key=?").bind(key).first<{window_start:string;count:number}>();
+  } catch (error) {
+    if (!String(error).includes("no such table: rate_limits")) throw error;
+    await db.prepare("CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY NOT NULL, window_start TEXT NOT NULL, count INTEGER DEFAULT 0 NOT NULL)").run();
+    current = await db.prepare("SELECT window_start,count FROM rate_limits WHERE key=?").bind(key).first<{window_start:string;count:number}>();
+  }
   const now = new Date();
   if (!current || now.getTime() - new Date(current.window_start).getTime() >= windowSeconds * 1000) {
     await db.prepare("INSERT INTO rate_limits (key,window_start,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=1")
