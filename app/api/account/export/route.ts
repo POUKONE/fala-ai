@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { getD1 } from "../../../../db/d1";
+import { getPostgresDb } from "../../../../db/postgres";
 import { enforceRateLimit } from "../../../../db/security";
 import { recordActivity } from "../../../../db/user-activity";
 
@@ -9,7 +9,7 @@ export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return Response.json({error:"Authentification requise"},{status:401});
   if (!await enforceRateLimit(user.email,"data-export",3,3600)) return Response.json({error:"Un export est déjà disponible. Réessayez plus tard."},{status:429});
-  const db = getD1();
+  const db = getPostgresDb();
   const [account,profile,applications,activity,reports] = await Promise.all([
     db.prepare("SELECT email,display_name,created_at,last_seen_at,consent_version,consented_at FROM users WHERE email=?").bind(user.email).first(),
     db.prepare("SELECT * FROM profiles WHERE user_email=?").bind(user.email).first(),

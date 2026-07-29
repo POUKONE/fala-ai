@@ -1,4 +1,4 @@
-import { getD1 } from "../../../../db/d1";
+import { getPostgresDb } from "../../../../db/postgres";
 import { CONSENT_VERSION } from "../../../../db/security";
 import { createSession, SESSION_COOKIE } from "../../../email-auth";
 import { supabaseSignUp } from "../../../supabase-auth";
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const name = String(body.displayName ?? "").trim().slice(0, 120) || email.split("@")[0];
   if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8) return Response.json({ error: "Adresse valide et mot de passe de 8 caractères minimum requis" }, { status: 400 });
   if (!body.consent) return Response.json({ error: "Votre consentement est requis pour créer le compte" }, { status: 400 });
-  const db = getD1();
+  const db = getPostgresDb();
   const existing = await db.prepare("SELECT email,email_verified_at,password_hash FROM users WHERE lower(email)=lower(?)").bind(email).first<{email:string;email_verified_at:string|null;password_hash:string|null}>();
   if (existing && (existing.email_verified_at || existing.password_hash)) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 });
   if (!existing?.email_verified_at) return Response.json({ error: "Vérifiez d’abord votre adresse e-mail avec le code reçu" }, { status: 400 });

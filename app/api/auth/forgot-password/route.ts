@@ -1,3 +1,2 @@
-import { getD1 } from "../../../../db/d1";
-import { enforceRateLimit } from "../../../../db/security";
-export async function POST(request:Request){const {email}=await request.json() as {email?:string}; const value=String(email??"").trim().toLowerCase(); if(!/^\S+@\S+\.\S+$/.test(value))return Response.json({ok:true,message:"Si cette adresse existe, un lien sera envoyé."}); if(!await enforceRateLimit(value,"password-reset",3,3600))return Response.json({error:"Trop de demandes"},{status:429}); const token=crypto.randomUUID(); await getD1().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(token,new Date(Date.now()+3600000).toISOString(),value).run(); return Response.json({ok:true,message:"Si cette adresse existe, un lien de récupération sera envoyé."});}
+// Backwards-compatible alias for clients that used the original endpoint.
+export { POST, dynamic } from "../forgot/route";

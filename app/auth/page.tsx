@@ -1,12 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 
-export default function AuthPage() {
+function AuthPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : params.get("mode") === "reset" ? "reset" : "login");
@@ -70,4 +70,8 @@ export default function AuthPage() {
     </section>
     <footer className="auth-footer"><span>Fala AI · Données privées et contrôle utilisateur</span><span><Link href="/privacy">Confidentialité</Link><Link href="/terms">Conditions</Link></span></footer>
   </main>;
+}
+
+export default function AuthPage() {
+  return <Suspense fallback={<main className="auth-shell" aria-busy="true" /> }><AuthPageContent /></Suspense>;
 }

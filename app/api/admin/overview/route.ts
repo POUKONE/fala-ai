@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { getD1 } from "../../../../db/d1";
+import { getPostgresDb } from "../../../../db/postgres";
 import { touchUser } from "../../../../db/user-activity";
 import { applyRetentionPolicy, hasAdminAccess } from "../../../../db/security";
 import { createDailyBackup } from "../../../../db/backup";
@@ -13,12 +13,12 @@ export async function GET() {
   await touchUser(user);
   await applyRetentionPolicy();
   void createDailyBackup().catch(() => {});
-  const db = getD1();
+  const db = getPostgresDb();
   const [users,active,applications,recentApps,statuses,recentUsers,activity,reports,errors,roles] = await Promise.all([
     db.prepare("SELECT COUNT(*) AS count FROM users").first<{count:number}>(),
-    db.prepare("SELECT COUNT(*) AS count FROM users WHERE last_seen_at >= datetime('now','-7 days')").first<{count:number}>(),
+    db.prepare("SELECT COUNT(*) AS count FROM users WHERE last_seen_at >= (CURRENT_TIMESTAMP - INTERVAL '7 days')").first<{count:number}>(),
     db.prepare("SELECT COUNT(*) AS count FROM applications").first<{count:number}>(),
-    db.prepare("SELECT COUNT(*) AS count FROM applications WHERE created_at >= datetime('now','-7 days')").first<{count:number}>(),
+    db.prepare("SELECT COUNT(*) AS count FROM applications WHERE created_at >= (CURRENT_TIMESTAMP - INTERVAL '7 days')").first<{count:number}>(),
     db.prepare("SELECT status, COUNT(*) AS count FROM applications GROUP BY status ORDER BY count DESC").all(),
     db.prepare("SELECT email,display_name,created_at,last_seen_at,suspended_at,suspension_reason,consented_at FROM users ORDER BY last_seen_at DESC LIMIT 50").all(),
     db.prepare("SELECT user_email,event_type,description,created_at FROM activity_events ORDER BY id DESC LIMIT 30").all(),

@@ -1,7 +1,6 @@
-import { getD1 } from "../../../../db/d1";
+import { getPostgresDb } from "../../../../db/postgres";
 import { enforceRateLimit } from "../../../../db/security";
 import { sendTransactionalMail } from "../../../../db/mailer";
-import { supabaseResetPassword } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,16 +13,16 @@ export async function POST(request: Request) {
   // automated abuse contained. The v2 key also avoids locking users who were
   // caught by the previous one-hour window during the initial rollout.
   if (!await enforceRateLimit(value, "password-reset-v2", 5, 900)) return Response.json({ error: "Trop de demandes. Réessayez dans quelques minutes." }, { status: 429 });
-  try { await supabaseResetPassword(value, new URL("/auth?mode=reset", request.url).toString()); } catch { /* Keep the response generic. */ }
   const token = crypto.randomUUID();
-  const account = await getD1().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
+  const account = await getPostgresDb().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
   if (account) {
-    await getD1().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(token, new Date(Date.now() + 3600000).toISOString(), value).run();
+    await getPostgresDb().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(token, new Date(Date.now() + 3600000).toISOString(), value).run();
     const resetUrl = new URL(`/auth?mode=reset&token=${encodeURIComponent(token)}`, request.url).toString();
     const delivery = await sendTransactionalMail({
       to: value,
-      subject: "Réinitialisez votre mot de passe — Fala AI",
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#1c1925;line-height:1.6"><h2>Réinitialisation de votre mot de passe</h2><p>Bonjour,</p><p>Vous avez demandé à modifier le mot de passe de votre compte Fala AI.</p><p><a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:7px;background:#1c1925;color:#fff;text-decoration:none;font-weight:700">Choisir un nouveau mot de passe</a></p><p>Ce lien est valable pendant <strong>1 heure</strong> et ne peut être utilisé qu’une seule fois.</p><p>Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.</p><p>À bientôt,<br>L’équipe Fala AI</p></div>`
+      subject: "Modifier votre mot de passe Fala AI",
+      text: `Bonjour,\n\nVous avez demandé à modifier le mot de passe de votre compte Fala AI. Ouvrez ce lien pour choisir un nouveau mot de passe : ${resetUrl}\n\nLe lien reste valable 1 heure et ne peut être utilisé qu’une seule fois. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer ce message.\n\nL’équipe Fala AI`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;padding:28px 20px;color:#1c1925;line-height:1.6"><p style="margin:0 0 20px;font-weight:700;color:#5131ea">Fala AI</p><h2 style="margin:0 0 12px;font-size:22px">Modifier votre mot de passe</h2><p>Bonjour,</p><p>Une demande de modification a été faite pour votre compte Fala AI.</p><p style="margin:24px 0"><a href="${resetUrl}" style="display:inline-block;padding:12px 18px;border-radius:8px;background:#1c1925;color:#fff;text-decoration:none;font-weight:700">Choisir un nouveau mot de passe</a></p><p style="font-size:13px;color:#6d6b78">Ce lien reste valable 1 heure et ne peut être utilisé qu’une seule fois. Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer ce message.</p><p>À bientôt,<br>L’équipe Fala AI</p></div>`
     });
     if (!delivery.configured) return Response.json({ error: "La récupération par e-mail n’est pas encore configurée. L’administrateur doit connecter un service d’e-mail transactionnel." }, { status: 503 });
   }

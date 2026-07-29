@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { getD1 } from "../../../db/d1";
+import { getPostgresDb } from "../../../db/postgres";
 import { recordActivity, touchUser } from "../../../db/user-activity";
 import { calculateScore, type ScoringProfile } from "../../../db/scoring";
 import { enforceRateLimit, getAccountState } from "../../../db/security";
@@ -11,7 +11,7 @@ export async function GET() {
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
   if ((await getAccountState(user.email))?.suspended_at) return Response.json({error:"Compte suspendu"},{status:403});
   await touchUser(user);
-  const row = await getD1().prepare("SELECT * FROM profiles WHERE user_email = ?").bind(user.email).first();
+  const row = await getPostgresDb().prepare("SELECT * FROM profiles WHERE user_email = ?").bind(user.email).first();
   return Response.json({ profile: row ?? null });
 }
 
@@ -25,7 +25,7 @@ export async function PUT(request: Request) {
   const value = (key: string) => String(body[key] ?? "").trim();
   const salaryMin = Math.max(0, Number(body.salaryMin ?? 0) || 0);
   const now = new Date().toISOString();
-  await getD1().prepare(`INSERT INTO profiles
+  await getPostgresDb().prepare(`INSERT INTO profiles
     (user_email,target_title,location,contract_type,skills,experience_level,education_level,languages,sectors,salary_min,updated_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(user_email) DO UPDATE SET target_title=excluded.target_title,location=excluded.location,
@@ -38,11 +38,11 @@ export async function PUT(request: Request) {
     skills:value("skills"), experience_level:value("experienceLevel"), education_level:value("educationLevel"),
     languages:value("languages"), sectors:value("sectors"), salary_min:salaryMin,
   };
-  const existing = await getD1().prepare("SELECT * FROM applications WHERE user_email = ?").bind(email).all<Record<string, unknown>>();
+  const existing = await getPostgresDb().prepare("SELECT * FROM applications WHERE user_email = ?").bind(email).all<Record<string, unknown>>();
   if (existing.results.length) {
-    await getD1().batch(existing.results.map((application) => {
+    await getPostgresDb().batch(existing.results.map((application) => {
       const assessment = calculateScore(profile, application);
-      return getD1().prepare("UPDATE applications SET score=?, score_breakdown=?, updated_at=? WHERE id=? AND user_email=?")
+      return getPostgresDb().prepare("UPDATE applications SET score=?, score_breakdown=?, updated_at=? WHERE id=? AND user_email=?")
         .bind(assessment.score, assessment.breakdown ? JSON.stringify(assessment.breakdown) : null, now, application.id, email);
     }));
   }

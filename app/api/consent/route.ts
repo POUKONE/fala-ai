@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
-import { getD1 } from "../../../db/d1";
+import { getPostgresDb } from "../../../db/postgres";
 import { CONSENT_VERSION, enforceRateLimit } from "../../../db/security";
 import { recordActivity } from "../../../db/user-activity";
 
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   const body = await request.json() as {accepted?:boolean};
   if (body.accepted !== true) return Response.json({error:"Votre accord explicite est requis pour utiliser l’espace personnel."},{status:400});
   const now = new Date().toISOString();
-  await getD1().prepare("UPDATE users SET consent_version=?,consented_at=? WHERE email=?").bind(CONSENT_VERSION,now,user.email).run();
+  await getPostgresDb().prepare("UPDATE users SET consent_version=?,consented_at=? WHERE email=?").bind(CONSENT_VERSION,now,user.email).run();
   await recordActivity(user,"privacy.consent","Politique de confidentialité et conditions acceptées");
   return Response.json({ok:true,version:CONSENT_VERSION,consentedAt:now});
 }

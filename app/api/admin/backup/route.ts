@@ -1,5 +1,5 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
-import { getD1 } from "../../../../db/d1";
+import { getPostgresDb } from "../../../../db/postgres";
 import { enforceRateLimit, hasAdminAccess } from "../../../../db/security";
 import { createDailyBackup } from "../../../../db/backup";
 
@@ -10,7 +10,7 @@ export async function GET() {
   if (!admin || !await hasAdminAccess(admin.email)) return Response.json({ error: "Accès administrateur requis" }, { status: 403 });
   if (!await enforceRateLimit(admin.email, "admin-backup", 2, 86400)) return Response.json({ error: "Limite de sauvegardes atteinte" }, { status: 429 });
   const external = await createDailyBackup();
-  const db = getD1();
+  const db = getPostgresDb();
   const [users, profiles, applications, activity, reports, roles] = await Promise.all([
     db.prepare("SELECT email,display_name,created_at,last_seen_at,consent_version,consented_at,suspended_at,suspension_reason FROM users").all(),
     db.prepare("SELECT * FROM profiles").all(),

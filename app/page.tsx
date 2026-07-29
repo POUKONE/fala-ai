@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import JSZip from "jszip";
 
 type Application = {
   id:number; company:string; role:string; location:string; contract_type:string; source:string;
@@ -17,6 +18,7 @@ type Profile = {
 
 type ActivityEvent = { event_type:string; description:string; created_at:string };
 type ParsedOffer = {company?:string;role?:string;location?:string;contractType?:string;source?:string;requiredSkills?:string;experienceRequired?:string;educationRequired?:string;languages?:string;sector?:string;salaryMin?:number;notes?:string};
+type NotificationReminder = {id:number;type:string;date:string;company:string;role:string;status:string};
 
 const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
@@ -34,6 +36,66 @@ function scoreLabel(score:number|null) {
   if (score >= 75) return "Très bon match";
   if (score >= 60) return "Match possible";
   return "À examiner";
+}
+
+type InterviewQuestion = { label:string; prompt:string; hint:string };
+function interviewQuestions(application:Application):InterviewQuestion[] {
+  const role = application.role || "ce poste";
+  const skills = application.required_skills ? application.required_skills.split(/[,;\n]+/).map((item)=>item.trim()).filter(Boolean).slice(0,3).join(", ") : "vos compétences clés";
+  return [
+    {label:"Présentation",prompt:`Présentez-vous en 60 secondes et expliquez pourquoi votre parcours correspond au poste de ${role}.`,hint:"Structurez votre réponse : parcours → expertise → lien avec le poste."},
+    {label:"Motivation",prompt:`Pourquoi souhaitez-vous rejoindre ${application.company} sur ce poste ?`,hint:"Citez un élément précis de l’entreprise ou de l’offre, puis reliez-le à votre objectif."},
+    {label:"Compétences",prompt:`Donnez un exemple concret où vous avez utilisé ${skills}.`,hint:"Utilisez STAR : situation, tâche, action, résultat. Ajoutez un chiffre si possible."},
+    {label:"Situation",prompt:"Parlez d’une difficulté professionnelle que vous avez résolue et de ce que vous en avez appris.",hint:"Restez factuel, expliquez votre décision et terminez par l’impact obtenu."},
+  ];
+}
+
+function escapePdf(value:string) { return value.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)"); }
+function downloadBlob(blob:Blob, filename:string) { const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
+function downloadPdf(text:string) {
+  const lines=text.split(/\r?\n/).flatMap((line)=>line.match(/.{1,88}/g) ?? [""]).slice(0,120);
+  const commands=["BT","/F1 10 Tf","50 770 Td","14 TL",...lines.map((line,index)=>`(${escapePdf(line)}) Tj${index<lines.length-1?" T*":""}`),"ET"].join("\n");
+  const objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",`<< /Length ${commands.length} >>\nstream\n${commands}\nendstream`];
+  let pdf="%PDF-1.4\n"; const offsets=[0]; objects.forEach((object,index)=>{offsets.push(pdf.length);pdf+=`${index+1} 0 obj\n${object}\nendobj\n`;}); const xref=pdf.length; pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map((offset)=>String(offset).padStart(10,"0")+" 00000 n ").join("\n")}\ntrailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  downloadBlob(new Blob([pdf],{type:"application/pdf"}),"fala-ai-cv-ats.pdf");
+}
+async function downloadDocx(text:string) {
+  const xmlEscape=(value:string)=>value.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
+  const paragraphs=text.split(/\r?\n/).map((line)=>`<w:p><w:r><w:t xml:space="preserve">${xmlEscape(line||" ")}</w:t></w:r></w:p>`).join("");
+  const zip=new JSZip();
+  zip.file("[Content_Types].xml",`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+  zip.file("_rels/.rels",`<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file("word/document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`);
+  downloadBlob(await zip.generateAsync({type:"blob",compression:"DEFLATE"}),"fala-ai-cv-ats.docx");
+}
+async function readCvFile(file:File,onProgress?:(value:number)=>void) {
+  onProgress?.(5);
+  const filename=file.name.toLowerCase();
+  if (filename.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    const zip=await JSZip.loadAsync(await file.arrayBuffer()); const documentFile=zip.file("word/document.xml");
+    if (!documentFile) throw new Error("Le document DOCX ne contient pas de texte lisible.");
+    const xml=await documentFile.async("text");
+    onProgress?.(100); return xml.replace(/<w:tab\s*\/>/g,"\t").replace(/<w:br\s*\/>/g,"\n").replace(/<\/w:p>/g,"\n").replace(/<[^>]+>/g,"").replaceAll("&amp;","&").replaceAll("&lt;","<").replaceAll("&gt;",">").trim();
+  }
+  if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return file.text();
+  let text="";
+  try {
+    const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+    const options={data:await file.arrayBuffer(),disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+    const document=await pdfjs.getDocument(options).promise;
+    const pages:string[]=[];
+    for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
+      const page=await document.getPage(pageNumber); const content=await page.getTextContent();
+      pages.push((content.items as Array<{str?:string}>).map((item)=>item.str??"").join(" "));
+      onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));
+    }
+    text=pages.join("\n").replace(/[ \t]+/g," ").trim();
+  } catch {
+    const raw=new TextDecoder("latin1").decode(await file.arrayBuffer());
+    text=[...raw.matchAll(/\(([^()]*)\)\s*Tj/g)].map((match)=>match[1]).join(" ").replaceAll("\\n","\n").replaceAll("\\(","(").replaceAll("\\)",")").trim();
+  }
+  if (text.trim().length<40) throw new Error("Ce PDF semble être une image ou ne contient pas de texte sélectionnable. Utilisez un PDF texte ou collez le contenu du CV.");
+  onProgress?.(100); return text;
 }
 
 export default function Home() {
@@ -58,8 +120,43 @@ export default function Home() {
   const [saving,setSaving] = useState(false);
   const [toast,setToast] = useState("");
   const [notificationsEnabled,setNotificationsEnabled] = useState(false);
+  const [notificationReminders,setNotificationReminders] = useState<NotificationReminder[]>([]);
+  const [cvText,setCvText] = useState("");
+  const [readingCv,setReadingCv] = useState(false);
+  const [cvReadProgress,setCvReadProgress] = useState(0);
+  const [adaptedCv,setAdaptedCv] = useState("");
+  const [adaptingCv,setAdaptingCv] = useState(false);
+  const [interviewPrep,setInterviewPrepState] = useState<Application|null>(null);
+  const [prepMode,setPrepMode] = useState<"guide"|"simulation">("guide");
+  const [prepQuestionIndex,setPrepQuestionIndex] = useState(0);
+  const [prepAnswer,setPrepAnswer] = useState("");
+  const [prepFeedback,setPrepFeedback] = useState("");
 
   const notify = (message:string) => { setToast(message); window.setTimeout(()=>setToast(""),2600); };
+
+  function openInterviewPrep(application:Application) {
+    setInterviewPrepState(application); setPrepMode("guide"); setPrepQuestionIndex(0); setPrepAnswer(""); setPrepFeedback("");
+  }
+  function setInterviewPrep(application:Application|null) {
+    if (application) openInterviewPrep(application); else setInterviewPrepState(null);
+  }
+
+  function evaluateInterviewAnswer() {
+    if (!interviewPrep) return;
+    const answer = prepAnswer.trim();
+    if (answer.length < 40) { setPrepFeedback("Votre réponse est encore trop courte. Ajoutez le contexte, votre action et le résultat obtenu."); return; }
+    const hasStructure = /situation|contexte|t[aâ]che|action|r[eé]sultat|impact|chiffre|%|€/.test(answer.toLowerCase());
+    setPrepFeedback(hasStructure
+      ? "Bonne base : votre réponse contient des éléments concrets. À l’oral, commencez par l’idée principale et terminez par le résultat."
+      : "Réponse claire, mais rendez-la plus convaincante avec la méthode STAR et un résultat mesurable.");
+  }
+
+  function nextInterviewQuestion() {
+    if (!interviewPrep) return;
+    const questions = interviewQuestions(interviewPrep);
+    if (prepQuestionIndex >= questions.length - 1) { setPrepFeedback("Simulation terminée. Relisez vos réponses et notez un exemple chiffré à réutiliser."); return; }
+    setPrepQuestionIndex((current)=>current+1); setPrepAnswer(""); setPrepFeedback("");
+  }
 
   const loadData = useCallback(async () => {
     setError("");
@@ -78,19 +175,55 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
+  useEffect(()=>{ if (!currentUser) return; const timer=window.setTimeout(()=>void syncNotifications(true),0); const interval=window.setInterval(()=>void syncNotifications(true),60000); return()=>{window.clearTimeout(timer);window.clearInterval(interval);}; },[currentUser]);
+
+  async function syncNotifications(showBrowserAlerts = false) {
+    const response = await fetch("/api/notifications", { cache:"no-store" });
+    if (!response.ok) return;
+    const data = await response.json() as {enabled?:boolean; reminders?:NotificationReminder[]};
+    setNotificationsEnabled(Boolean(data.enabled));
+    const next = data.reminders ?? [];
+    setNotificationReminders(next);
+    if (!showBrowserAlerts || !data.enabled || !("Notification" in window) || Notification.permission !== "granted") return;
+    const storageKey = `fala-notified-${currentUser?.email ?? "user"}`;
+    const already = new Set(JSON.parse(window.sessionStorage.getItem(storageKey) ?? "[]") as string[]);
+    next.filter((item) => new Date(item.date).getTime() <= Date.now() + 24 * 60 * 60 * 1000).forEach((item) => {
+      const key = `${item.id}-${item.type}-${item.date}`;
+      if (already.has(key)) return;
+      new Notification(`Fala AI · ${item.type}`, { body:`${item.role} chez ${item.company} — ${formatDate(item.date)}` });
+      already.add(key);
+    });
+    window.sessionStorage.setItem(storageKey, JSON.stringify([...already].slice(-50)));
+  }
 
   async function enableNotifications() {
     if (!("Notification" in window)) { notify("Les notifications ne sont pas prises en charge par ce navigateur"); return; }
     const permission = await Notification.requestPermission();
-    setNotificationsEnabled(permission === "granted");
     if (permission === "granted") {
+      await fetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:true}) });
+      setNotificationsEnabled(true);
       new Notification("Fala AI — rappels activés", { body: "Vous recevrez les échéances enregistrées dans vos candidatures." });
       notify("Notifications navigateur activées");
-    } else notify("Autorisation de notifications refusée");
+      await syncNotifications(true);
+    } else {
+      await fetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:false}) });
+      setNotificationsEnabled(false); notify("Autorisation de notifications refusée");
+    }
+  }
+
+  async function adaptCvToOffer() {
+    setAdaptingCv(true); setError("");
+    const response = await fetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
+    const body = await response.json().catch(() => ({}));
+    setAdaptingCv(false);
+    if (!response.ok) { setError(body.error ?? "Adaptation du CV impossible"); return; }
+    setAdaptedCv(String(body.adaptedCv ?? "")); notify("CV restructuré pour une lecture ATS");
   }
 
   const filtered = useMemo(()=>applications.filter((item)=>{
-    const matchesQuery = `${item.company} ${item.role} ${item.location}`.toLowerCase().includes(query.toLowerCase());
+    const normalizedQuery = query.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const searchable = `${item.company} ${item.role} ${item.location} ${item.status} ${item.source} ${item.required_skills} ${item.notes}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const matchesQuery = !normalizedQuery || searchable.includes(normalizedQuery);
     return matchesQuery && (filter==="Toutes"||item.status===filter);
   }),[applications,query,filter]);
 
@@ -103,6 +236,7 @@ export default function Home() {
   const responseRate = metrics.sent ? Math.round(applications.filter((a)=>["Entretien","Offre","Refusée"].includes(a.status)).length/metrics.sent*100) : 0;
   const interviewRate = metrics.sent ? Math.round(metrics.interviews/metrics.sent*100) : 0;
   const reminders = useMemo(()=>applications.flatMap((application)=>[{type:"Prochaine action",date:application.next_action_at,application},{type:"Entretien",date:application.interview_at,application}]).filter((item)=>item.date).sort((a,b)=>new Date(a.date!).getTime()-new Date(b.date!).getTime()).slice(0,20),[applications]);
+  const interviewTarget = useMemo(()=>applications.find((application)=>application.status==="Entretien") ?? applications[0] ?? null,[applications]);
 
   async function acceptConsent(){setSaving(true);const response=await fetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
 
@@ -158,9 +292,9 @@ export default function Home() {
     <section className="public-features"><article><span>01</span><h2>Pipeline vivant</h2><p>Liste, Kanban, statuts et échéances restent synchronisés avec vos données.</p></article><article><span>02</span><h2>Scoring explicable</h2><p>Chaque score s’appuie sur vos compétences, votre expérience et vos préférences.</p></article><article><span>03</span><h2>Suivi personnel</h2><p>Vos candidatures appartiennent uniquement à votre compte authentifié.</p></article></section><footer className="public-footer"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions d’utilisation</a></footer>
   </main>;
 
-  if(suspension)return <main className="account-state"><span className="brand-mark">F</span><h1>Compte suspendu</h1><p>{suspension}</p><p>Vous pouvez demander un examen à l’administrateur : ibrahimapoukone@gmail.com.</p><a href="/signout-with-chatgpt?return_to=%2F">Se déconnecter</a></main>;
+  if(suspension)return <main className="account-state"><span className="brand-mark">F</span><h1>Compte suspendu</h1><p>{suspension}</p><p>Vous pouvez demander un examen à l’administrateur : ibrahimapoukone@gmail.com.</p><a href="/api/auth/logout">Se déconnecter</a></main>;
 
-  if(consentRequired)return <main className="consent-shell"><section className="consent-card"><span className="brand-mark">F</span><p className="eyebrow">PROTECTION DE VOS DONNÉES</p><h1>Bienvenue dans votre espace Fala AI</h1><p>Pour activer votre espace personnel, confirmez que vous avez lu la politique de confidentialité et les conditions d’utilisation. Vos candidatures restent privées et vous pourrez exporter ou supprimer vos données à tout moment.</p><label className="consent-check"><input type="checkbox" checked={consentAccepted} onChange={(event)=>setConsentAccepted(event.target.checked)}/>J’accepte le traitement de mes données pour fournir le service Fala AI.</label><div><a href="/privacy" target="_blank">Politique de confidentialité</a><a href="/terms" target="_blank">Conditions d’utilisation</a></div><button className="primary" disabled={!consentAccepted||saving} onClick={()=>void acceptConsent()}>{saving?"Activation…":"Activer mon espace"}</button><a href="/signout-with-chatgpt?return_to=%2F">Refuser et se déconnecter</a></section></main>;
+  if(consentRequired)return <main className="consent-shell"><section className="consent-card"><span className="brand-mark">F</span><p className="eyebrow">PROTECTION DE VOS DONNÉES</p><h1>Bienvenue dans votre espace Fala AI</h1><p>Pour activer votre espace personnel, confirmez que vous avez lu la politique de confidentialité et les conditions d’utilisation. Vos candidatures restent privées et vous pourrez exporter ou supprimer vos données à tout moment.</p><label className="consent-check"><input type="checkbox" checked={consentAccepted} onChange={(event)=>setConsentAccepted(event.target.checked)}/>J’accepte le traitement de mes données pour fournir le service Fala AI.</label><div><a href="/privacy" target="_blank">Politique de confidentialité</a><a href="/terms" target="_blank">Conditions d’utilisation</a></div><button className="primary" disabled={!consentAccepted||saving} onClick={()=>void acceptConsent()}>{saving?"Activation…":"Activer mon espace"}</button><a href="/api/auth/logout">Refuser et se déconnecter</a></section></main>;
 
   return <main className="app-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
@@ -177,7 +311,7 @@ export default function Home() {
         <button className="nav-item sync-button" onClick={()=>setModal("profile")}><span className="icon">⚙</span>Profil de scoring</button>
         <button className="nav-item sync-button" onClick={()=>setModal("privacy")}><span className="icon">⌁</span>Mes données</button>
         <button className="nav-item sync-button" onClick={()=>setModal("report")}><span className="icon">!</span>Signaler un problème</button>
-        <a className="nav-item" href="/signout-with-chatgpt?return_to=%2F"><span className="icon">↪</span>Se déconnecter</a>
+        <a className="nav-item" href="/api/auth/logout"><span className="icon">↪</span>Se déconnecter</a>
       </div>
     </aside>
 
@@ -185,7 +319,7 @@ export default function Home() {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark">F</span> Fala AI</div>
         <label className="search"><span>⌕</span><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Rechercher dans vos candidatures…"/></label>
-        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="notification-button" onClick={()=>setModal("notifications")} aria-label={`${reminders.length} rappels`}>♢{reminders.length>0&&<b>{reminders.length}</b>}</button><button className="primary" onClick={()=>setModal("import")}>＋ Ajouter</button><details className="mobile-menu"><summary aria-label="Ouvrir le menu">•••</summary><div><a href="#dashboard">Vue d’ensemble</a><a href="#applications">Candidatures</a><a href="#analytics">Statistiques</a><button onClick={()=>setModal("profile")}>Profil de scoring</button><button onClick={()=>setModal("privacy")}>Mes données</button><button onClick={()=>setModal("report")}>Signaler un problème</button>{isAdmin&&<a href="/admin">Administration</a>}<a href="/signout-with-chatgpt?return_to=%2F">Se déconnecter</a></div></details></div>
+        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="notification-button" onClick={()=>setModal("notifications")} aria-label={`${reminders.length} rappels`}>♢{reminders.length>0&&<b>{reminders.length}</b>}</button><button className="primary" onClick={()=>setModal("import")}>＋ Ajouter</button><details className="mobile-menu"><summary aria-label="Ouvrir le menu">•••</summary><div><a href="#dashboard">Vue d’ensemble</a><a href="#applications">Candidatures</a><a href="#analytics">Statistiques</a><button onClick={()=>setModal("profile")}>Profil de scoring</button><button onClick={()=>setModal("privacy")}>Mes données</button><button onClick={()=>setModal("report")}>Signaler un problème</button>{isAdmin&&<a href="/admin">Administration</a>}<a href="/api/auth/logout">Se déconnecter</a></div></details></div>
       </header>
 
       <div className="page-wrap">
@@ -211,7 +345,7 @@ export default function Home() {
           <article className="insight-card"><div className="section-title"><div><h2>Répartition du pipeline</h2><p>Données actualisées</p></div></div><div className="status-bars">{statuses.slice(0,5).map((status)=>{const count=applications.filter((a)=>a.status===status).length;return <div key={status}><span>{status}</span><div><i style={{width:`${applications.length?Math.max(4,count/applications.length*100):0}%`}}/></div><b>{count}</b></div>})}</div></article>
           <article className="assistant-card"><span className="assistant-icon">✓</span><div><span className="focus-label">ÉTAT DU SYSTÈME</span><h3>{profile?"Scoring opérationnel":"Scoring en attente du profil"}</h3><p>{profile?"Chaque nouvelle candidature est comparée à votre profil et reçoit un détail pondéré sur 100.":"Complétez votre profil pour calculer des scores fondés sur vos critères réels."}</p><button onClick={()=>setModal("profile")}>{profile?"Mettre à jour mes critères":"Configurer le scoring"} →</button></div></article>
         </section>
-        <section className="activity-card" id="activity"><div className="section-title"><div><h2>Votre historique d’activité</h2><p>Conservé dans votre espace personnel entre chaque connexion</p></div><span className="history-count">{activity.length}</span></div><div className="user-activity-list">{activity.slice(0,12).map((item,index)=><div key={`${item.created_at}-${index}`}><span className="activity-dot"/><div><strong>{item.description}</strong><small>{item.event_type}</small></div><time>{formatDate(item.created_at)}</time></div>)}{!activity.length&&<p className="admin-empty">Votre historique apparaîtra ici après vos premières actions.</p>}</div></section>
+        <section className="interview-hub" id="interview-prep"><div className="section-title"><div><span className="focus-label">COACHING FALA AI</span><h2>Préparer vos entretiens</h2><p>Une méthode simple pour arriver prêt, répondre clairement et relancer au bon moment.</p></div>{interviewTarget&&<button className="primary" onClick={()=>setInterviewPrep(interviewTarget)}>Lancer une simulation →</button>}</div><div className="interview-grid"><article><span>01 · AVANT</span><h3>Préparer le fond</h3><p>Relisez l’offre, sélectionnez trois réalisations chiffrées et préparez une présentation de 60 secondes.</p><ul><li>Situation → action → résultat</li><li>Deux questions sur le poste</li><li>Une relance prête à envoyer</li></ul></article><article><span>02 · PENDANT</span><h3>Répondre avec impact</h3><p>Commencez par l’idée principale, donnez un exemple concret, puis reliez-le au besoin de l’entreprise.</p><ul><li>« Voici ce que j’ai réalisé… »</li><li>« L’impact mesurable a été… »</li><li>« Ce que je reproduirais ici… »</li></ul></article><article><span>03 · APRÈS</span><h3>Transformer l’échange</h3><p>Notez les attentes, envoyez un message de remerciement et planifiez une relance liée à une date précise.</p><ul><li>Remerciement personnalisé</li><li>Rappel d’un point clé</li><li>Prochaine étape demandée</li></ul></article></div><div className="interview-bottom"><div><strong>Expressions clés</strong><p>{profile?.sectors?.toLowerCase().includes("finance")||interviewTarget?.role.toLowerCase().includes("finance")?"Marge, prévision, contrôle, indicateurs, fiabilité des données, aide à la décision.":interviewTarget?.role.toLowerCase().includes("tech")||interviewTarget?.role.toLowerCase().includes("data")?"Qualité, automatisation, mise à l’échelle, impact utilisateur, documentation.":"Résultat, collaboration, priorisation, amélioration continue, satisfaction client."}</p></div><button className="ghost-button" onClick={()=>interviewTarget?setInterviewPrep(interviewTarget):notify("Ajoutez d’abord une candidature")}>S’entraîner aux questions types</button></div></section>
         <footer><span>Fala AI · Accès privé et données isolées par utilisateur</span><span><i/> Stockage persistant actif</span></footer>
       </div>
     </section>
@@ -220,15 +354,17 @@ export default function Home() {
 
     {modal==="add"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="add-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">＋</span><h2 id="add-title">Ajouter une candidature</h2><p>Les champs extraits restent modifiables avant enregistrement. Aucune information manquante n’est inventée.</p><form key={JSON.stringify(parsedOffer)} action={addApplication}><div className="form-grid"><label>Entreprise<input name="company" defaultValue={parsedOffer?.company||""} required autoFocus/></label><label>Poste<input name="role" defaultValue={parsedOffer?.role||""} required/></label><label>Localisation<input name="location" defaultValue={parsedOffer?.location||""}/></label><label>Type de contrat<select name="contractType" defaultValue={parsedOffer?.contractType||""}><option value="">Non précisé</option><option>CDI</option><option>CDD</option><option>Alternance</option><option>Stage</option><option>Freelance</option></select></label><label>Source<input name="source" defaultValue={parsedOffer?.source||""} placeholder="LinkedIn, France Travail…"/></label><label>Statut<select name="status" defaultValue="À préparer">{statuses.map((s)=><option key={s}>{s}</option>)}</select></label><label className="span-2">Compétences demandées<input name="requiredSkills" defaultValue={parsedOffer?.requiredSkills||""} placeholder="Python, SQL, dbt"/></label><label>Expérience demandée<select name="experienceRequired" defaultValue={parsedOffer?.experienceRequired||""}><option value="">Non précisée</option><option>Débutant</option><option>1-3 ans</option><option>3-5 ans</option><option>5+ ans</option></select></label><label>Niveau d’études<select name="educationRequired" defaultValue={parsedOffer?.educationRequired||""}><option value="">Non précisé</option>{educationLevels.map((level)=><option key={level}>{level}</option>)}</select></label><label>Langues<input name="languages" defaultValue={parsedOffer?.languages||""}/></label><label>Secteur<input name="sector" defaultValue={parsedOffer?.sector||""}/></label><label>Salaire minimum (€)<input name="salaryMin" type="number" min="0" defaultValue={parsedOffer?.salaryMin||0}/></label><label>Date de candidature<input name="appliedAt" type="date"/></label><label>Prochaine action<input name="nextActionAt" type="datetime-local"/></label><label>Entretien<input name="interviewAt" type="datetime-local"/></label><label className="span-2">Notes<textarea name="notes" rows={3} defaultValue={parsedOffer?.notes||""}/></label></div><div className="modal-actions"><button type="button" onClick={()=>setModal(null)}>Annuler</button><button className="primary" disabled={saving}>{saving?"Enregistrement…":"Enregistrer durablement"}</button></div></form></div></div>}
 
-    {modal==="import"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">⌁</span><h2 id="import-title">Analyser une offre</h2><p>Collez le texte complet d’une annonce ou importez un fichier texte. Fala AI extrait automatiquement le poste, les compétences, le diplôme, l’expérience, la localisation et le salaire.</p><label className="file-picker">Importer un fichier TXT, MD ou CSV<input type="file" accept=".txt,.md,.csv,text/plain,text/csv" onChange={async(event)=>{const file=event.target.files?.[0];if(file)setOfferText(await file.text());}}/></label><label>Texte de l’annonce<textarea rows={12} value={offerText} onChange={(event)=>setOfferText(event.target.value)} placeholder="Collez ici le contenu de l’annonce…"/></label><div className="modal-actions"><button type="button" onClick={()=>{setParsedOffer(null);setModal("add");}}>Saisie manuelle</button><button className="primary" disabled={saving||offerText.trim().length<30} onClick={()=>void analyzeOffer()}>{saving?"Analyse…":"Extraire les informations"}</button></div></div></div>}
+    {modal==="import"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="import-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">⌁</span><h2 id="import-title">Analyser une offre et préparer votre CV</h2><p>Collez l’annonce pour extraire les critères, puis ajoutez votre CV. Le résultat reste fondé uniquement sur votre contenu et est structuré pour une lecture ATS.</p><label className="file-picker">Importer l’annonce (TXT, MD ou CSV)<input type="file" accept=".txt,.md,.csv,text/plain,text/csv" onChange={async(event)=>{const file=event.target.files?.[0];if(file)setOfferText(await file.text());}}/></label><label>Texte de l’annonce<textarea rows={8} value={offerText} onChange={(event)=>setOfferText(event.target.value)} placeholder="Collez ici le contenu de l’annonce…"/></label><div className="modal-actions"><button type="button" onClick={()=>{setParsedOffer(null);setModal("add");}}>Saisie manuelle</button><button className="primary" disabled={saving||offerText.trim().length<30} onClick={()=>void analyzeOffer()}>{saving?"Analyse…":"Extraire les informations"}</button></div><hr/><label className="file-picker">Importer votre CV (PDF, DOCX ou texte)<input type="file" accept=".pdf,.txt,.md,.doc,.docx,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={async(event)=>{const file=event.target.files?.[0];if(!file)return;setReadingCv(true);setCvReadProgress(5);try{setCvText(await readCvFile(file,(value)=>setCvReadProgress(value)));setError("");}catch(cause){setError(cause instanceof Error?cause.message:"Lecture du CV impossible");}finally{setReadingCv(false);}}}/></label>{readingCv&&<div className="cv-progress" role="status"><span className="loading-ring"/><div><strong>Lecture du CV en cours… {cvReadProgress}%</strong><div className="progress-track"><i style={{width:`${cvReadProgress}%`}}/></div></div></div>}<label>Votre CV<textarea rows={10} value={cvText} onChange={(event)=>setCvText(event.target.value)} placeholder="Collez le texte de votre CV…"/></label><small className="input-hint">Offre : {offerText.trim().length} caractères · CV : {cvText.trim().length} caractères</small><button className="primary" disabled={readingCv||adaptingCv||offerText.trim().length<40||cvText.trim().length<80} onClick={()=>void adaptCvToOffer()}>{readingCv?"Lecture du CV…":adaptingCv?"Préparation…":"Adapter mon CV aux critères ATS"}</button>{adaptedCv&&<label className="cv-result">CV adapté — vérifiez chaque information avant envoi<textarea rows={14} value={adaptedCv} onChange={(event)=>setAdaptedCv(event.target.value)} /><span className="download-actions"><button type="button" className="ghost-button" onClick={()=>void navigator.clipboard?.writeText(adaptedCv)}>Copier</button><button type="button" className="ghost-button" onClick={()=>downloadPdf(adaptedCv)}>Télécharger PDF</button><button type="button" className="ghost-button" onClick={()=>void downloadDocx(adaptedCv)}>Télécharger DOCX</button></span></label>}</div></div>}
 
     {modal==="privacy"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal data-modal" role="dialog" aria-modal="true" aria-labelledby="data-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">⌁</span><h2 id="data-title">Mes données</h2><p>Vous gardez le contrôle sur les informations associées à votre compte.</p><div className="data-actions"><a href="/api/account/export" download>Exporter toutes mes données (JSON)</a><a href="/privacy" target="_blank">Lire la politique de confidentialité</a><a href="/terms" target="_blank">Lire les conditions d’utilisation</a><button className="danger-button" onClick={()=>void deleteAccount()}>Supprimer mon compte et tout l’historique</button></div></div></div>}
 
     {modal==="report"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal" role="dialog" aria-modal="true" aria-labelledby="report-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">!</span><h2 id="report-title">Signaler un problème</h2><p>Votre signalement sera visible dans le centre de contrôle administrateur.</p><form action={submitReport}><label>Catégorie<select name="category"><option>Problème technique</option><option>Données personnelles</option><option>Abus</option><option>Suggestion</option></select></label><label>Description<textarea name="message" rows={6} minLength={10} required/></label><div className="modal-actions"><button type="button" onClick={()=>setModal(null)}>Annuler</button><button className="primary" disabled={saving}>{saving?"Envoi…":"Envoyer"}</button></div></form></div></div>}
 
-    {modal==="notifications"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal reminders-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">♢</span><h2 id="reminders-title">Rappels et échéances</h2><p>Les échéances enregistrées sont affichées ici. Activez les notifications navigateur pour recevoir un rappel sur cet appareil.</p><button className="primary notification-enable" onClick={()=>void enableNotifications()} disabled={notificationsEnabled}>{notificationsEnabled?"✓ Notifications activées":"Activer les notifications"}</button><div className="reminder-list">{reminders.map((item,index)=><button key={`${item.type}-${item.date}-${index}`} onClick={()=>{setSelected(item.application);setModal(null);}}><span>{item.type}</span><strong>{item.application.role} · {item.application.company}</strong><time>{formatDate(item.date)}</time></button>)}{!reminders.length&&<p>Aucune échéance programmée.</p>}</div></div></div>}
+    {modal==="notifications"&&<div className="modal-backdrop" onMouseDown={()=>setModal(null)}><div className="modal reminders-modal" role="dialog" aria-modal="true" aria-labelledby="reminders-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">♢</span><h2 id="reminders-title">Rappels et échéances</h2><p>Fala AI vérifie vos prochaines actions et entretiens. Une notification est affichée sur cet appareil dans les 24 heures avant l’échéance lorsque vous avez donné votre accord.</p><button className="primary notification-enable" onClick={()=>void enableNotifications()} disabled={notificationsEnabled}>{notificationsEnabled?"✓ Notifications activées":"Activer les notifications"}</button><div className="reminder-list">{(notificationReminders.length?notificationReminders:reminders.map((item)=>({id:item.application.id,type:item.type,date:item.date!,company:item.application.company,role:item.application.role,status:item.application.status}))).map((item,index)=><button key={`${item.type}-${item.date}-${index}`} onClick={()=>{const application=applications.find((candidate)=>candidate.id===item.id);if(application)setSelected(application);setModal(null);}}><span>{item.type}</span><strong>{item.role} · {item.company}</strong><time>{formatDate(item.date)}</time></button>)}{!(notificationReminders.length||reminders.length)&&<p>Aucune échéance programmée.</p>}</div></div></div>}
 
-    {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><div className="modal score-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setSelected(null)} aria-label="Fermer">×</button><div className="score-summary"><span className="score huge">{selected.score??"—"}<small>/100</small></span><div><span className="focus-label">{scoreLabel(selected.score)}</span><h2 id="detail-title">{selected.role}</h2><p>{selected.company} · {selected.location||"Localisation non précisée"}</p></div></div>{selected.score_breakdown&&<div className="score-bars">{Object.entries(JSON.parse(selected.score_breakdown) as Record<string,number>).map(([label,value])=><div key={label}><div><span>{scoreNames[label]??label}</span><b>{value} / {scoreMaximums[label]??10}</b></div><progress value={value} max={scoreMaximums[label]??10}/></div>)}</div>}<form action={updateApplication}><div className="form-grid"><label>Statut<select name="status" defaultValue={selected.status}>{statuses.map((s)=><option key={s}>{s}</option>)}</select></label><label>Prochaine action<input name="nextActionAt" type="datetime-local" defaultValue={selected.next_action_at?.slice(0,16)||""}/></label><label>Entretien<input name="interviewAt" type="datetime-local" defaultValue={selected.interview_at?.slice(0,16)||""}/></label><label className="span-2">Notes<textarea name="notes" rows={4} defaultValue={selected.notes}/></label></div><div className="modal-actions split-actions"><button type="button" className="danger-button" onClick={()=>void removeApplication()}>Supprimer</button><span/><button type="button" onClick={()=>setSelected(null)}>Fermer</button><button className="primary" disabled={saving}>{saving?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
+    {interviewPrep&&<div className="modal-backdrop" onMouseDown={()=>setInterviewPrep(null)}><div className="modal wide-modal interview-modal" role="dialog" aria-modal="true" aria-labelledby="prep-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setInterviewPrep(null)} aria-label="Fermer">×</button><span className="modal-icon">◎</span><h2 id="prep-title">Préparer votre entretien</h2><p>{interviewPrep.role} · {interviewPrep.company}</p><div className="prep-tabs"><button className={prepMode==="guide"?"active":""} onClick={()=>setPrepMode("guide")}>Guide express</button><button className={prepMode==="simulation"?"active":""} onClick={()=>setPrepMode("simulation")}>Simulation interactive</button></div>{prepMode==="guide"?<><div className="prep-list"><article><strong>1. Votre présentation</strong><p>Préparez une réponse de 60 à 90 secondes : parcours, expertise principale et lien avec ce poste.</p></article><article><strong>2. Trois exemples concrets</strong><p>Utilisez la méthode STAR (situation, tâche, action, résultat) pour illustrer les compétences demandées.</p></article><article><strong>3. Questions à poser</strong><p>Demandez les priorités des 90 premiers jours, les critères de réussite et les prochaines étapes.</p></article><article><strong>4. Dernière vérification</strong><p>Relisez l’annonce, préparez deux réalisations chiffrées et planifiez votre relance.</p></article></div><div className="modal-actions"><button className="primary" onClick={()=>setPrepMode("simulation")}>Commencer la simulation →</button></div></>:<><div className="simulation-progress"><span>QUESTION {prepQuestionIndex+1}/{interviewQuestions(interviewPrep).length}</span><div><i style={{width:`${((prepQuestionIndex+1)/interviewQuestions(interviewPrep).length)*100}%`}}/></div></div><article className="simulation-card"><span className="focus-label">{interviewQuestions(interviewPrep)[prepQuestionIndex].label}</span><h3>{interviewQuestions(interviewPrep)[prepQuestionIndex].prompt}</h3><p>{interviewQuestions(interviewPrep)[prepQuestionIndex].hint}</p><textarea rows={6} value={prepAnswer} onChange={(event)=>setPrepAnswer(event.target.value)} placeholder="Écrivez votre réponse comme si vous étiez face au recruteur…"/><small>{prepAnswer.trim().length} caractères · visez une réponse concrète</small></article>{prepFeedback&&<div className="prep-feedback" role="status"><strong>Feedback Fala AI</strong><p>{prepFeedback}</p></div>}<div className="modal-actions"><button type="button" onClick={evaluateInterviewAnswer} disabled={!prepAnswer.trim()}>Analyser ma réponse</button><button type="button" className="primary" onClick={nextInterviewQuestion}>{prepQuestionIndex===interviewQuestions(interviewPrep).length-1?"Terminer":"Question suivante →"}</button></div></>}</div></div>}
+
+    {selected&&<div className="modal-backdrop" onMouseDown={()=>setSelected(null)}><div className="modal score-modal" role="dialog" aria-modal="true" aria-labelledby="detail-title" onMouseDown={(e)=>e.stopPropagation()}><button className="modal-close" onClick={()=>setSelected(null)} aria-label="Fermer">×</button>{selected.status==="Entretien"&&<button className="ghost-button interview-prep-trigger" onClick={()=>setInterviewPrep(selected)}>Préparer cet entretien →</button>}<div className="score-summary"><span className="score huge">{selected.score??"—"}<small>/100</small></span><div><span className="focus-label">{scoreLabel(selected.score)}</span><h2 id="detail-title">{selected.role}</h2><p>{selected.company} · {selected.location||"Localisation non précisée"}</p></div></div>{selected.score_breakdown&&<div className="score-bars">{Object.entries(JSON.parse(selected.score_breakdown) as Record<string,number>).map(([label,value])=><div key={label}><div><span>{scoreNames[label]??label}</span><b>{value} / {scoreMaximums[label]??10}</b></div><progress value={value} max={scoreMaximums[label]??10}/></div>)}</div>}<form action={updateApplication}><div className="form-grid"><label>Statut<select name="status" defaultValue={selected.status}>{statuses.map((s)=><option key={s}>{s}</option>)}</select></label><label>Prochaine action<input name="nextActionAt" type="datetime-local" defaultValue={selected.next_action_at?.slice(0,16)||""}/></label><label>Entretien<input name="interviewAt" type="datetime-local" defaultValue={selected.interview_at?.slice(0,16)||""}/></label><label className="span-2">Notes<textarea name="notes" rows={4} defaultValue={selected.notes}/></label></div><div className="modal-actions split-actions"><button type="button" className="danger-button" onClick={()=>void removeApplication()}>Supprimer</button><span/><button type="button" onClick={()=>setSelected(null)}>Fermer</button><button className="primary" disabled={saving}>{saving?"Enregistrement…":"Enregistrer"}</button></div></form></div></div>}
     {toast&&<div className="toast" role="status"><span>✓</span>{toast}</div>}
   </main>;
 }
