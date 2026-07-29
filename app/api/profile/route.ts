@@ -1,7 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getPostgresDb } from "../../../db/postgres";
 import { recordActivity, touchUser } from "../../../db/user-activity";
-import { calculateScore, type ScoringProfile } from "../../../db/scoring";
+import { calculateScoreWithAI, type ScoringProfile } from "../../../db/scoring";
 import { enforceRateLimit, getAccountState } from "../../../db/security";
 
 export const dynamic = "force-dynamic";
@@ -40,11 +40,9 @@ export async function PUT(request: Request) {
   };
   const existing = await getPostgresDb().prepare("SELECT * FROM applications WHERE user_email = ?").bind(email).all<Record<string, unknown>>();
   if (existing.results.length) {
-    await getPostgresDb().batch(existing.results.map((application) => {
-      const assessment = calculateScore(profile, application);
-      return getPostgresDb().prepare("UPDATE applications SET score=?, score_breakdown=?, updated_at=? WHERE id=? AND user_email=?")
-        .bind(assessment.score, assessment.breakdown ? JSON.stringify(assessment.breakdown) : null, now, application.id, email);
-    }));
+    const assessed = await Promise.all(existing.results.map(async (application) => ({ application, assessment: await calculateScoreWithAI(profile, application) })));
+    await getPostgresDb().batch(assessed.map(({ application, assessment }) => getPostgresDb().prepare("UPDATE applications SET score=?, score_breakdown=?, updated_at=? WHERE id=? AND user_email=?")
+      .bind(assessment.score, assessment.breakdown ? JSON.stringify(assessment.breakdown) : null, now, application.id, email)));
   }
   await recordActivity(user,"profile.updated","Profil de scoring mis à jour");
   return Response.json({ ok: true, recalculated: existing.results.length });

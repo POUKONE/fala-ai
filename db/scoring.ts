@@ -107,3 +107,40 @@ export function calculateScore(profile: ScoringProfile | null, body: Application
     breakdown,
   };
 }
+
+function aiEndpoint() {
+  const base = String(process.env.AI_BASE_URL ?? "").trim().replace(/\/$/, "");
+  return base ? `${base}${base.endsWith("/v1") ? "/chat/completions" : "/v1/chat/completions"}` : "";
+}
+
+/** Uses the configured OpenAI-compatible model when available, while keeping the
+ * explainable weighted score as a deterministic safety net. Every AI value is
+ * clamped to the same database weights before being persisted. */
+export async function calculateScoreWithAI(profile: ScoringProfile | null, body: ApplicationInput) {
+  const fallback = calculateScore(profile, body);
+  const endpoint = aiEndpoint();
+  if (!profile || !endpoint) return fallback;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      method: "POST",
+      headers: { "content-type": "application/json", ...(process.env.AI_API_KEY ? { authorization: `Bearer ${process.env.AI_API_KEY}` } : {}) },
+      body: JSON.stringify({
+        model: String(process.env.AI_MODEL ?? "llama-3.1-8b-instant"), temperature: 0, max_tokens: 300,
+        messages: [
+          { role: "system", content: `Évalue la compatibilité entre ce profil et cette offre. Réponds uniquement en JSON valide avec les clés ${Object.keys(SCORE_WEIGHTS).join(",")}. Chaque valeur doit être un entier entre 0 et son maximum: ${JSON.stringify(SCORE_WEIGHTS)}. N'utilise que les informations fournies.` },
+          { role: "user", content: JSON.stringify({ profile, offer: body }) },
+        ],
+      }),
+    });
+    if (!response.ok) return fallback;
+    const payload = await response.json().catch(() => ({})) as { choices?: Array<{ message?: { content?: string } }> };
+    const raw = String(payload.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const breakdown = Object.fromEntries(Object.entries(SCORE_WEIGHTS).map(([key, maximum]) => [key, Math.max(0, Math.min(maximum, Math.round(Number(parsed[key]) || 0)))])) as Record<keyof typeof SCORE_WEIGHTS, number>;
+    return { score: Object.values(breakdown).reduce((sum, value) => sum + value, 0), breakdown };
+  } catch { return fallback; }
+  finally { clearTimeout(timeout); }
+}

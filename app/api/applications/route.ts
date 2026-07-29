@@ -1,7 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getPostgresDb } from "../../../db/postgres";
 import { recordActivity, touchUser } from "../../../db/user-activity";
-import { calculateScore, type ScoringProfile } from "../../../db/scoring";
+import { calculateScoreWithAI, type ScoringProfile } from "../../../db/scoring";
 import { enforceRateLimit, getAccountState } from "../../../db/security";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +19,14 @@ export async function GET() {
   ]);
   if (!profile) return Response.json({ applications: result.results });
   const rows = result.results as Array<Record<string, unknown>>;
-  const applications = rows.map((application) => {
-    const assessment = calculateScore(profile, application);
-    return { ...application, score: assessment.score, score_breakdown: assessment.breakdown ? JSON.stringify(assessment.breakdown) : null };
-  });
-  const changed = applications.filter((application,index) => application.score !== result.results[index]?.score || application.score_breakdown !== result.results[index]?.score_breakdown);
+  const applications = rows.map((application) => ({ ...application, score: application.score ?? null, score_breakdown: application.score_breakdown ?? null }));
+  const changed = applications.filter((application) => application.score === null || !application.score_breakdown);
   if (changed.length) {
-    await db.batch(changed.map((application) => db.prepare("UPDATE applications SET score=?,score_breakdown=? WHERE id=? AND user_email=?")
-      .bind(application.score,application.score_breakdown,(application as Record<string, unknown>)["id"],user.email)));
+    const assessed = await Promise.all(changed.map(async (application) => ({ application, assessment: await calculateScoreWithAI(profile, application) })));
+    await db.batch(assessed.map(({ application, assessment }) => {
+      application.score = assessment.score; application.score_breakdown = assessment.breakdown ? JSON.stringify(assessment.breakdown) : null;
+      return db.prepare("UPDATE applications SET score=?,score_breakdown=? WHERE id=? AND user_email=?").bind(application.score,application.score_breakdown,application.id,user.email);
+    }));
   }
   return Response.json({ applications });
 }
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   if (!text("company") || !text("role")) return Response.json({ error: "Entreprise et poste requis" }, { status: 400 });
   const status = STATUSES.includes(text("status")) ? text("status") : "À préparer";
   const profile = await getPostgresDb().prepare("SELECT * FROM profiles WHERE user_email = ?").bind(email).first<ScoringProfile>();
-  const assessment = calculateScore(profile ?? null, body);
+  const assessment = await calculateScoreWithAI(profile ?? null, body);
   const now = new Date().toISOString();
   const db = getPostgresDb();
   await db.prepare(`INSERT INTO applications

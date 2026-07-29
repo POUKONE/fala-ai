@@ -220,6 +220,8 @@ footer { padding:25px 2px 5px; display:flex; justify-content:space-between; colo
 .data-actions { display:grid; gap:9px; }.data-actions a,.data-actions button { min-height:43px; padding:0 13px; display:flex; align-items:center; border:1px solid var(--line); border-radius:9px; color:#555661; background:white; text-decoration:none; font-size:10px; font-weight:800; }.data-actions .danger-button { border-color:#f1c4bb; }
 .modal hr { width:100%; margin:18px 0 4px; border:0; border-top:1px solid var(--line); }
 .cv-result { display:grid; gap:8px; padding-top:5px; }
+.cv-file-status { display:grid; gap:5px; padding:14px; border:1px solid #ded9f4; border-radius:10px; color:#5b49ba; background:#faf9ff; font-size:10px; }
+.cv-file-status span { color:#85828f; font-size:9px; }
 .cv-result textarea { min-height:260px; padding:13px; border:1px solid #dcd8f4; border-radius:9px; color:#30303a; background:#faf9ff; font-family:Arial,Helvetica,sans-serif; font-size:11px; line-height:1.55; resize:vertical; }
 .download-actions { display:flex; flex-wrap:wrap; gap:7px; }
 .input-hint { color:#888692; font-size:9px; }
