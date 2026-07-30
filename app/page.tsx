@@ -59,7 +59,7 @@ function interviewQuestions(application:Application):InterviewQuestion[] {
 
 function escapePdf(value:string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("œ","oe").replaceAll("Œ","OE").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)"); }
 function downloadBlob(blob:Blob, filename:string) { const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
-function downloadPdf(text:string) {
+function createPdfBlob(text:string) {
   const lines=text.split(/\r?\n/).map((line)=>line.trim()).filter(Boolean);
   const headingPattern=/^(PROFIL CIBLE|COMPETENCES|COMPÉTENCES|EXPERIENCE|EXPÉRIENCE|FORMATION|AUTRES INFORMATIONS|AUTRES ELEMENTS)/i;
   const firstHeading=lines.findIndex((line)=>headingPattern.test(line));
@@ -76,7 +76,14 @@ function downloadPdf(text:string) {
   const commandsText=commands.join("\n");
   const objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",`<< /Length ${commandsText.length} >>\nstream\n${commandsText}\nendstream`];
   let pdf="%PDF-1.4\n"; const offsets=[0]; objects.forEach((object,index)=>{offsets.push(pdf.length);pdf+=`${index+1} 0 obj\n${object}\nendobj\n`;}); const xref=pdf.length; pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map((offset)=>String(offset).padStart(10,"0")+" 00000 n ").join("\n")}\ntrailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
-  downloadBlob(new Blob([pdf],{type:"application/pdf"}),"fala-ai-cv-ats.pdf");
+  return new Blob([pdf],{type:"application/pdf"});
+}
+function downloadPdf(text:string) { previewPdf(text); }
+function previewPdf(text:string) {
+  const url=URL.createObjectURL(createPdfBlob(text));
+  const previewWindow=window.open(url,"_blank","noopener,noreferrer");
+  if (!previewWindow) downloadBlob(createPdfBlob(text),"fala-ai-cv-ats.pdf");
+  window.setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
 async function downloadDocx(text:string) {
   const xmlEscape=(value:string)=>value.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
