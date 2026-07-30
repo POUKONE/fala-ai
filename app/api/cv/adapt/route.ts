@@ -46,7 +46,7 @@ type StructuredAdaptation = {
 };
 
 function formatStructuredAdaptation(result: StructuredAdaptation) {
-  const lines = [String(result.titre_recommande ?? "").trim(), "", String(result.accroche ?? "").trim(), ""];
+  const lines = [String(result.titre_recommande ?? "").trim(), "", "PROFIL", String(result.accroche ?? "").trim(), ""];
   const skills = Array.isArray(result.competences_cles) ? result.competences_cles : [result.competences_cles];
   if (skills.some(Boolean)) lines.push("COMPÉTENCES", ...skills.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)), "");
   const experiences = Array.isArray(result.experiences_optimisees) ? result.experiences_optimisees : [result.experiences_optimisees];

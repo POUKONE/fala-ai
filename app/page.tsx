@@ -65,17 +65,20 @@ function escapePdf(value:string) { return value.normalize("NFD").replace(/[\u030
 function downloadBlob(blob:Blob, filename:string) { const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function createPdfBlob(text:string) {
   const lines=text.split(/\r?\n/).map((line)=>line.trim()).filter(Boolean);
-  const headingPattern=/^(PROFIL CIBLE|COMPETENCES|COMPÉTENCES|EXPERIENCE|EXPÉRIENCE|FORMATION|AUTRES INFORMATIONS|AUTRES ELEMENTS)/i;
+  const headingPattern=/^(PROFIL|PROFIL CIBLE|COMPETENCES|COMPÉTENCES|EXPERIENCE|EXPÉRIENCE|FORMATION|CERTIFICATIONS?|LANGUES?|INFORMATIONS|AUTRES INFORMATIONS|AUTRES ELEMENTS|MOTS-CLÉS)/i;
   const firstHeading=lines.findIndex((line)=>headingPattern.test(line));
   const header=lines.slice(0,firstHeading<0?Math.min(4,lines.length):firstHeading);
   const sections:{title:string;items:string[]}[]=[];
   let current:{title:string;items:string[]}|null=null;
   for(const line of lines.slice(firstHeading<0?4:firstHeading)){ if(headingPattern.test(line)){current={title:line,items:[]};sections.push(current);} else if(current) current.items.push(line); }
-  const commands:string[]=[]; let y=758; const add=(x:number,size:number,value:string,bold=false)=>{if(y<45)return;commands.push(`BT /${bold?"F2":"F1"} ${size} Tf ${x} ${y} Td (${escapePdf(value.slice(0,100))}) Tj ET`);y-=size+7;};
-  add(50,31,header[0]??"CV",true); if(header[1]) add(50,15,header[1],true); if(header.slice(2).length){y-=8; add(50,10,header.slice(2).join("   "));} y-=13;
-  for(const section of sections){ if(y<80)break; commands.push(`0.2 w 50 ${y+8} m 562 ${y+8} l S`); y-=18; add(50,14,section.title.toUpperCase(),true); y-=2;
-    if(/COMPETENCES|COMPÉTENCES/i.test(section.title)){ const skills=section.items.flatMap((item)=>item.split(/\s*[·•,;]\s*/).filter(Boolean)); const colWidth=170; const startY=y; skills.slice(0,18).forEach((skill,index)=>{const col=index%3; const row=Math.floor(index/3); const yy=startY-row*18; commands.push(`BT /F1 10 Tf ${50+col*colWidth} ${yy} Td (${escapePdf(skill)}) Tj ET`);}); y=startY-Math.ceil(Math.min(skills.length,18)/3)*18-8; }
-    else { for(const item of section.items.slice(0,14)){ const wrapped=item.match(/.{1,92}/g)??[item]; for(const part of wrapped) add(50,10,part); y-=3; } }
+  const navy="0.08 0.22 0.38";
+  const ink="0.08 0.08 0.08";
+  const commands:string[]=[]; let y=758;
+  const add=(x:number,size:number,value:string,bold=false,color=ink)=>{if(y<45)return;commands.push(`${color} rg BT /${bold?"F2":"F1"} ${size} Tf ${x} ${y} Td (${escapePdf(value.slice(0,105))}) Tj ET`);y-=size+7;};
+  add(50,27,header[0]??"CV",true,ink); if(header[1]) add(50,14,header[1],true,ink); if(header.slice(2).length){y-=4; add(50,9,header.slice(2).join("   "),false,ink);} y-=10;
+  for(const section of sections){ if(y<80)break; commands.push(`${navy} rg 0.6 w 50 ${y+8} m 562 ${y+8} l S`); y-=18; add(50,13,section.title.toUpperCase(),true,navy); y-=2;
+    if(/COMPETENCES|COMPÉTENCES/i.test(section.title)){ const skills=section.items.flatMap((item)=>item.split(/\s*[·•,;]\s*/).filter(Boolean)); const colWidth=170; const startY=y; skills.slice(0,18).forEach((skill,index)=>{const col=index%3; const row=Math.floor(index/3); const yy=startY-row*16; commands.push(`${ink} rg BT /F1 9 Tf ${50+col*colWidth} ${yy} Td (${escapePdf(skill.slice(0,28))}) Tj ET`);}); y=startY-Math.ceil(Math.min(skills.length,18)/3)*16-8; }
+    else { for(const item of section.items.slice(0,14)){ const wrapped=item.match(/.{1,92}/g)??[item]; for(const part of wrapped) add(50,9,part); y-=2; } }
   }
   const commandsText=commands.join("\n");
   const objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",`<< /Length ${commandsText.length} >>\nstream\n${commandsText}\nendstream`];
