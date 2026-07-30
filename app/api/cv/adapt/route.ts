@@ -37,35 +37,43 @@ function buildLocalAdaptation(cv:string,target:string,matchedSkills:string[]) {
   return output.join("\n").replace(/\n{3,}/g,"\n\n").trim();
 }
 
-type StructuredAdaptation = {
-  titre_recommande?: string;
-  accroche?: string;
-  competences_cles?: unknown;
-  experiences_optimisees?: unknown;
-  mots_cles_ajustes?: unknown;
+export interface ResumeATS {
+  header:{fullName:string;targetTitle:string;email:string;phone:string;location:string;linkedinUrl?:string;mobility?:string};
+  summary:string;
+  skills:{category:string;items:string[]}[];
+  experiences:{jobTitle:string;company:string;location:string;startDate:string;endDate:string;bulletPoints:string[]}[];
+  education:{degree:string;institution:string;location:string;startYear:string;endYear:string}[];
+  languages?:{language:string;proficiency:string}[];
+  projects?:{title:string;description:string;technologies:string[]}[];
 };
 
-function formatStructuredAdaptation(result: StructuredAdaptation) {
-  const printable=(value:unknown):string[]=>{
-    if(value===null||value===undefined||value==="")return [];
-    if(typeof value==="string"||typeof value==="number")return String(value).split(/\r?\n/).map((line)=>line.trim()).filter(Boolean);
-    if(Array.isArray(value))return value.flatMap(printable);
-    if(typeof value==="object")return Object.entries(value as Record<string,unknown>).flatMap(([key,item])=>{
-      const values=printable(item); return values.length?values.length===1?[`${key}: ${values[0]}`]:[`${key}:`,...values.map((line)=>`• ${line}`)]:[];
-    });
-    return [];
-  };
-  const lines = [String(result.titre_recommande ?? "").trim(), "", "PROFIL", String(result.accroche ?? "").trim(), ""];
-  const skills = printable(result.competences_cles);
-  if (skills.length) lines.push("COMPÉTENCES", ...skills, "");
-  const experiences = printable(result.experiences_optimisees);
-  if (experiences.length) lines.push("EXPÉRIENCE", ...experiences, "");
-  const keywords = printable(result.mots_cles_ajustes);
-  if (keywords.length) lines.push("MOTS-CLÉS ALIGNÉS", ...keywords);
-  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+function formatStructuredAdaptation(result:ResumeATS) {
+  const header=result.header; const contact=[header.email,header.phone,header.location,header.linkedinUrl,header.mobility].filter(Boolean).join(" | ");
+  const lines=[header.fullName,header.targetTitle,contact,"","PROFIL",result.summary.trim(),""];
+  if(result.skills.length) lines.push("COMPÉTENCES",...result.skills.flatMap((group)=>[`${group.category}:`,...group.items.map((item)=>`• ${item}`),""]));
+  if(result.experiences.length) lines.push("EXPÉRIENCE",...result.experiences.flatMap((experience)=>[`${experience.jobTitle} | ${experience.company} | ${experience.location} | ${experience.startDate} - ${experience.endDate}`,...experience.bulletPoints.map((item)=>`• ${item}`),""]));
+  if(result.education.length) lines.push("FORMATION",...result.education.map((item)=>`${item.degree} | ${item.institution} | ${item.location} | ${item.startYear} - ${item.endYear}`),"");
+  if(result.languages?.length) lines.push("LANGUES",...result.languages.map((item)=>`${item.language}: ${item.proficiency}`),"");
+  if(result.projects?.length) lines.push("PROJETS",...result.projects.flatMap((item)=>[item.title,item.description,`Technologies: ${item.technologies.join(", ")}`,""]));
+  return lines.join("\n").replace(/\n{3,}/g,"\n\n").trim();
 }
 
-async function adaptWithQwen(offer: string, cv: string): Promise<{ text: string; structured: StructuredAdaptation } | null> {
+function parseResumeATS(value:unknown):ResumeATS|null {
+  if(!value||typeof value!=="object"||Array.isArray(value))return null;
+  const item=value as Record<string,unknown>; const header=item.header as Record<string,unknown>;
+  const text=(entry:unknown)=>typeof entry==="string"?entry.trim():"";
+  const strings=(entry:unknown)=>Array.isArray(entry)&&entry.every((value)=>typeof value==="string")?(entry as string[]).map((value)=>value.trim()).filter(Boolean):null;
+  if(!header||typeof header!=="object"||Array.isArray(header)||!text(header.fullName)||!text(header.targetTitle)||!text(item.summary))return null;
+  if(!Array.isArray(item.skills)||!Array.isArray(item.experiences)||!Array.isArray(item.education))return null;
+  const skills=item.skills.map((entry)=>{const group=entry as Record<string,unknown>;const items=strings(group.items);return items&&text(group.category)?{category:text(group.category),items}:null;}).filter(Boolean) as ResumeATS["skills"];
+  const experiences=item.experiences.map((entry)=>{const value=entry as Record<string,unknown>;const bulletPoints=strings(value.bulletPoints);return bulletPoints?{jobTitle:text(value.jobTitle),company:text(value.company),location:text(value.location),startDate:text(value.startDate),endDate:text(value.endDate),bulletPoints}:null;}).filter(Boolean) as ResumeATS["experiences"];
+  const education=item.education.map((entry)=>{const value=entry as Record<string,unknown>;return {degree:text(value.degree),institution:text(value.institution),location:text(value.location),startYear:text(value.startYear),endYear:text(value.endYear)};});
+  const languages=Array.isArray(item.languages)?item.languages.map((entry)=>{const value=entry as Record<string,unknown>;return {language:text(value.language),proficiency:text(value.proficiency)};}).filter((value)=>value.language):undefined;
+  const projects=Array.isArray(item.projects)?item.projects.map((entry)=>{const value=entry as Record<string,unknown>;return {title:text(value.title),description:text(value.description),technologies:strings(value.technologies)??[]};}).filter((value)=>value.title||value.description):undefined;
+  return {header:{fullName:text(header.fullName),targetTitle:text(header.targetTitle),email:text(header.email),phone:text(header.phone),location:text(header.location),linkedinUrl:text(header.linkedinUrl)||undefined,mobility:text(header.mobility)||undefined},summary:text(item.summary),skills,experiences,education,languages,projects};
+}
+
+async function adaptWithQwen(offer: string, cv: string): Promise<{ text: string; structured: ResumeATS } | null> {
   const base = String(process.env.AI_BASE_URL ?? "").trim().replace(/\/$/, "");
   if (!base) return null;
   const model = String(process.env.AI_MODEL ?? "Qwen/Qwen3-8B").trim();
@@ -89,15 +97,16 @@ INSTRUCTIONS DE RESTRUCTURATION :
 - Accroche / Résumé : Rédige une synthèse de 3-4 lignes orientée impact et valeur ajoutée pour l'entreprise cible, sans ajouter de faits.
 - Compétences : Catégorise clairement (Tech Stack, Soft Skills, Outils / Methodologies).
 - Expériences : Structure chaque expérience au format Action + Contexte + Résultat avec des chiffres d'impact uniquement s'ils sont présents dans le CV.
-- Format : Retourne exclusivement un objet JSON valide avec les clés demandées. Les compétences et expériences doivent être des tableaux lisibles ; n'encode jamais un objet JSON dans une chaîne de caractères. Si une information n'est pas prouvée par le CV, omets-la.`;
+- Format : Retourne exclusivement un objet JSON strict conforme au modèle ResumeATS : header, summary, skills, experiences, education, languages et projects. Les dates doivent rester au format demandé. Si une information n'est pas prouvée par le CV, laisse la chaîne vide ou omets le tableau optionnel.`;
   try {
-    response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.1, max_tokens:3000, response_format:{type:"json_object"}, messages:[{role:"system",content:systemPrompt},{role:"user",content:`### OFFRE D'EMPLOI ###\n${offer}\n\n### CV À OPTIMISER ###\n${cv}\n\nFournis le résultat au format JSON avec les clés : "titre_recommande", "accroche", "competences_cles", "experiences_optimisees", "mots_cles_ajustes".`}]}) });
+    response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.1, max_tokens:3000, response_format:{type:"json_object"}, messages:[{role:"system",content:systemPrompt},{role:"user",content:`### OFFRE D'EMPLOI ###\n${offer}\n\n### CV À OPTIMISER ###\n${cv}\n\nRetourne uniquement un objet JSON conforme au modèle ResumeATS avec les clés header, summary, skills, experiences, education, languages et projects.`}]}) });
   } finally { clearTimeout(timeout); }
   if (!response.ok) return null;
   const data = await response.json().catch(() => ({})) as {choices?:Array<{message?:{content?:string}}>};
   const raw = String(data.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  let structured: StructuredAdaptation;
-  try { structured = JSON.parse(raw) as StructuredAdaptation; } catch { return null; }
+  let structured: ResumeATS|null;
+  try { structured = parseResumeATS(JSON.parse(raw)); } catch { return null; }
+  if(!structured) return null;
   const content = formatStructuredAdaptation(structured);
   const normalized=normalize(content);
   const headings=["experience","formation","competences","profil"].filter((heading)=>normalized.includes(heading));
