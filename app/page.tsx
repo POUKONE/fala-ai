@@ -99,7 +99,11 @@ async function downloadDocx(text:string) {
   zip.file("word/document.xml",`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`);
   downloadBlob(await zip.generateAsync({type:"blob",compression:"DEFLATE"}),"fala-ai-cv-ats.docx");
 }
-async function readCvFile(file:File,onProgress?:(value:number)=>void) {
+interface ReadCvOptions { onProgress?: (progress:number)=>void; }
+async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
+  const onProgress=typeof options === "function" ? options : options?.onProgress;
+  const maxSizeMb=10;
+  if(file.size>maxSizeMb*1024*1024) throw new Error(`Le fichier dépasse la taille maximale autorisée (${maxSizeMb} Mo).`);
   onProgress?.(5);
   const filename=file.name.toLowerCase();
   if (filename.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
@@ -123,8 +127,8 @@ async function readCvFile(file:File,onProgress?:(value:number)=>void) {
   let text="";
   try {
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const options={data:await file.arrayBuffer(),disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
-    const document=await pdfjs.getDocument(options).promise;
+    if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc=`//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+    const document=await pdfjs.getDocument({data:await file.arrayBuffer(),useSystemFonts:true}).promise;
     const pages:string[]=[];
     for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
       const page=await document.getPage(pageNumber); const content=await page.getTextContent();
