@@ -81,9 +81,14 @@ function createPdfBlob(text:string) {
 function downloadPdf(text:string) { previewPdf(text); }
 function previewPdf(text:string) {
   const url=URL.createObjectURL(createPdfBlob(text));
-  const previewWindow=window.open(url,"_blank","noopener,noreferrer");
-  if (!previewWindow) downloadBlob(createPdfBlob(text),"fala-ai-cv-ats.pdf");
-  window.setTimeout(()=>URL.revokeObjectURL(url),60000);
+  const overlay=document.createElement("div");
+  overlay.setAttribute("role","dialog"); overlay.setAttribute("aria-label","Aperçu PDF du CV adapté");
+  Object.assign(overlay.style,{position:"fixed",inset:"0",zIndex:"100",display:"flex",flexDirection:"column",gap:"12px",padding:"18px",background:"#171424d9"});
+  const toolbar=document.createElement("div"); Object.assign(toolbar.style,{display:"flex",justifyContent:"flex-end",gap:"8px"});
+  const download=document.createElement("a"); download.textContent="Télécharger le PDF"; download.href=url; download.download="fala-ai-cv-ats.pdf"; Object.assign(download.style,{padding:"10px 14px",borderRadius:"8px",background:"#8d78f2",color:"white",font:"700 12px system-ui",textDecoration:"none"});
+  const close=document.createElement("button"); close.textContent="Fermer"; Object.assign(close.style,{padding:"10px 14px",border:0,borderRadius:"8px",background:"white",color:"#3b3450",font:"700 12px system-ui",cursor:"pointer"});
+  const frame=document.createElement("iframe"); frame.src=url; frame.title="Aperçu PDF du CV adapté"; Object.assign(frame.style,{width:"min(900px,100%)",height:"calc(100dvh - 82px)",margin:"0 auto",border:0,borderRadius:"10px",background:"white"});
+  close.onclick=()=>{overlay.remove();URL.revokeObjectURL(url);}; toolbar.append(download,close); overlay.append(toolbar,frame); document.body.append(overlay);
 }
 async function downloadDocx(text:string) {
   const xmlEscape=(value:string)=>value.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;");
