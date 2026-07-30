@@ -1,4 +1,4 @@
-const SKILLS = ["Python","SQL","JavaScript","TypeScript","React","Next.js","Node.js","Java","C#","C++","PHP","Ruby","Go","Rust","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Power BI","Tableau","Excel","Salesforce","SAP","Figma","Git","dbt","Spark","Hadoop","Machine Learning","Data Analysis"];
+const SKILLS = ["Python","SQL","JavaScript","TypeScript","React","Next.js","Node.js","Java","C#","C++","PHP","Ruby","Go","Rust","AWS","Azure","GCP","Docker","Kubernetes","Terraform","Power BI","Tableau","Excel","Salesforce","SAP","Figma","Git","dbt","Spark","Hadoop","Machine Learning","Data Analysis","KPI","Reporting","CRM","MRR","NRR","GRR","LTV","Churn","CPQ","Business Intelligence","Data Quality","Financial Analysis","Process Improvement"];
 const SECTORS = ["Tech","Finance","Banque","Assurance","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom"];
 
 function matchFirst(text:string,patterns:RegExp[]){for(const pattern of patterns){const match=text.match(pattern);if(match?.[1])return match[1].trim();}return "";}
@@ -23,6 +23,10 @@ export function parseOfferText(source:string){
   const location=matchFirst(text,[/(?:lieu|localisation|poste basé à|basé à)\s*[:\-]?\s*([^.,;\n]{2,60})/i]);
   const remote=/télétravail|remote|à distance/i.test(text);const resolvedLocation=remote?(location?`${location}, Télétravail`:"Télétravail"):location;
   const company=matchFirst(text,[/(?:entreprise|société|company)\s*[:\-]\s*([^\n,;]{2,80})/i]);
-  const role=matchFirst(text,[/(?:poste|intitulé|job title)\s*[:\-]\s*([^\n,;]{2,100})/i])||lines.find(line=>line.length>=4&&line.length<=100&&!/entreprise|société|description/i.test(line))||"";
+  const role=matchFirst(text,[
+    /(?:poste|intitulé|job title)\s*[:\-]\s*([^\n,;]{2,100})/i,
+    /descriptif\s+du\s+poste\s+(?:en\s+tant\s+que\s+)?([^,.;\n]{4,100})/i,
+    /(?:recrutons|recherche(?:ons)?|looking\s+for)\s+(?:un[e]?\s+)?([^,.;\n]{4,100})/i,
+  ])||lines.find(line=>line.length>=4&&line.length<=100&&!/entreprise|société|description|descriptif du poste/i.test(line))||"";
   return {company,role,location:resolvedLocation,contractType:contract,requiredSkills:skills.join(", "),experienceRequired,educationRequired,languages:languages.join(", "),sector,salaryMin,source:"Annonce analysée",notes:`Annonce analysée automatiquement le ${new Date().toLocaleDateString("fr-FR")}. Vérifiez les champs avant enregistrement.`};
 }

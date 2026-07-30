@@ -43,6 +43,7 @@ export async function POST(request:Request) {
     matchedKeywords:result.matchedKeywords??[],
     targetRole:result.targetRole??null,
     provider:result.provider??"moteur local",
+    quality:result.quality??null,
     note:"Le résumé et l’adaptation utilisent uniquement les éléments détectés dans le CV. Vérifiez le résultat avant utilisation.",
   });
 }

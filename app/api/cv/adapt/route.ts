@@ -1,9 +1,22 @@
 import { getChatGPTUser } from "../../../chatgpt-auth";
 import { parseOfferText } from "../../../../db/offer-parser";
+import { enforceRateLimit, getAccountState, logSystemError } from "../../../../db/security";
+import { recordActivity } from "../../../../db/user-activity";
 
 export const dynamic = "force-dynamic";
 
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
+function compact(value: string) { return normalize(value).replace(/[^a-z0-9]+/g, ""); }
+function qualityReport(source: string, output: string, matchedKeywords: string[]) {
+  const normalized = normalize(output);
+  const sections = ["experience", "formation", "competences", "profil"].filter((section) => normalized.includes(section));
+  const coverage = matchedKeywords.length ? Math.round(matchedKeywords.filter((keyword) => compact(output).includes(compact(keyword))).length / matchedKeywords.length * 100) : 0;
+  const warnings: string[] = [];
+  if (compact(source) === compact(output)) warnings.push("Le contenu ressemble au CV source : vérifiez la restructuration.");
+  if (output.length < Math.max(120, Math.round(source.length * 0.35))) warnings.push("Le résultat est nettement plus court que le CV source.");
+  if (sections.length < 2) warnings.push("Moins de deux sections ATS standard ont été détectées.");
+  return { sourceCharacters: source.length, resultCharacters: output.length, sections, keywordCoverage: coverage, warnings };
+}
 const STOP_WORDS = new Set("avec pour dans une des les aux sur par vous votre nous notre cette comme plus sont être avoir poste entreprise expérience travail recherche niveau afin ainsi chez depuis sous entre selon sans très aux du de et ou en le la un une au ce se qui que est".split(" "));
 const SECTION_ALIASES = [
   {name:"EXPÉRIENCE", test:/^(exp[eé]rience|exp[eé]riences|parcours professionnel|emploi|professional experience)/i},
@@ -42,27 +55,41 @@ async function adaptWithQwen(offer: string, cv: string) {
   const normalized=normalize(content);
   const headings=["experience","formation","competences","profil"].filter((heading)=>normalized.includes(heading));
   const containsTemplateText=/resumez vos|utilisez la langue|soyez concis|exemple de cv|a completer|placeholder|je ne peux/i.test(normalized);
-  return content.length >= 120 && headings.length >= 2 && !containsTemplateText ? content : null;
+  // A model can return the input unchanged while still satisfying the basic
+  // heading checks. Treat that as a failed adaptation and use the deterministic
+  // fallback instead of presenting a false positive to the user.
+  const unchanged = compact(content) === compact(cv) || (compact(content).length > 0 && compact(cv).includes(compact(content)) && compact(content).length / compact(cv).length > 0.96);
+  return content.length >= 120 && headings.length >= 2 && !containsTemplateText && !unchanged ? content : null;
 }
 
 export async function POST(request: Request) {
   const user = await getChatGPTUser();
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
-  const body = await request.json().catch(() => ({})) as { offer?: string; cv?: string };
-  const offer = String(body.offer ?? "").trim().slice(0, 30000);
-  const cv = String(body.cv ?? "").trim().slice(0, 50000);
-  if (offer.length < 40 || cv.length < 80) return Response.json({ error: "Saisissez une annonce et un CV suffisamment détaillés." }, { status: 400 });
-  let modelAdapted = null;
-  try { modelAdapted = await adaptWithQwen(offer, cv); } catch { modelAdapted = null; }
-  let parsed;
-  try { parsed = parseOfferText(offer); } catch { parsed = { role: "", requiredSkills: "" }; }
-  const cvNormalized = normalize(cv);
-  const requested = String(parsed.requiredSkills ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-  const offerTerms = normalize(offer).split(/[^a-z0-9+#.]+/).filter((term) => term.length >= 4 && !STOP_WORDS.has(term));
-  const keywords = [...new Set([...requested.map(normalize), ...offerTerms])].slice(0, 80);
-  const matchedKeywords = keywords.filter((keyword) => cvNormalized.includes(keyword));
-  const matchedSkills = requested.filter((skill) => cvNormalized.includes(normalize(skill)));
-  const target = String(parsed.role ?? "").trim();
-  const adapted = buildLocalAdaptation(cv,target,matchedSkills);
-  return Response.json({ ok: true, adaptedCv: modelAdapted ?? adapted, matchedSkills, matchedKeywords, targetRole: target, provider: modelAdapted ? "Qwen3-8B" : "moteur local", note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
+  if ((await getAccountState(user.email))?.suspended_at) return Response.json({ error: "Compte suspendu" }, { status: 403 });
+  if (!await enforceRateLimit(user.email, "cv-adapt", 8, 3600)) return Response.json({ error: "Limite d’adaptations atteinte pour cette heure" }, { status: 429 });
+  try {
+    const body = await request.json().catch(() => ({})) as { offer?: string; cv?: string };
+    const offer = String(body.offer ?? "").trim().slice(0, 30000);
+    const cv = String(body.cv ?? "").trim().slice(0, 50000);
+    if (offer.length < 40 || cv.length < 80) return Response.json({ error: "Saisissez une annonce et un CV suffisamment détaillés." }, { status: 400 });
+    let modelAdapted = null;
+    try { modelAdapted = await adaptWithQwen(offer, cv); } catch { modelAdapted = null; }
+    let parsed;
+    try { parsed = parseOfferText(offer); } catch { parsed = { role: "", requiredSkills: "" }; }
+    const cvNormalized = normalize(cv);
+    const requested = String(parsed.requiredSkills ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+    const offerTerms = normalize(offer).split(/[^a-z0-9+#.]+/).filter((term) => term.length >= 4 && !STOP_WORDS.has(term));
+    const keywords = [...new Set([...requested.map(normalize), ...offerTerms])].slice(0, 80);
+    const matchedKeywords = keywords.filter((keyword) => cvNormalized.includes(keyword));
+    const matchedSkills = requested.filter((skill) => cvNormalized.includes(normalize(skill)));
+    const target = String(parsed.role ?? "").trim();
+    const adapted = buildLocalAdaptation(cv,target,matchedSkills);
+    const provider = modelAdapted ? "Qwen3-8B" : "moteur local";
+    const adaptedCv = modelAdapted ?? adapted;
+    await recordActivity(user, "cv.adapted", `CV adapté pour ${target || "une offre"} (${provider})`);
+    return Response.json({ ok: true, adaptedCv, matchedSkills, matchedKeywords, targetRole: target, provider, quality: qualityReport(cv, adaptedCv, matchedKeywords), note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
+  } catch (error) {
+    try { await logSystemError("/api/cv/adapt", error, user.email); } catch { /* journalisation best-effort */ }
+    return Response.json({ error: "Adaptation du CV momentanément indisponible" }, { status: 500 });
+  }
 }

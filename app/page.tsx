@@ -106,7 +106,18 @@ async function readCvFile(file:File,onProgress?:(value:number)=>void) {
     const zip=await JSZip.loadAsync(await file.arrayBuffer()); const documentFile=zip.file("word/document.xml");
     if (!documentFile) throw new Error("Le document DOCX ne contient pas de texte lisible.");
     const xml=await documentFile.async("text");
-    onProgress?.(100); return xml.replace(/<w:tab\s*\/>/g,"\t").replace(/<w:br\s*\/>/g,"\n").replace(/<\/w:p>/g,"\n").replace(/<[^>]+>/g,"").replaceAll("&amp;","&").replaceAll("&lt;","<").replaceAll("&gt;",">").trim();
+    const decodeXml=(value:string)=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,(entity)=>{
+      const key=entity.slice(1,-1).toLowerCase();
+      if(key==="amp")return "&"; if(key==="lt")return "<"; if(key==="gt")return ">"; if(key==="quot")return '"'; if(key==="apos")return "'"; if(key==="nbsp")return " ";
+      const code=key.startsWith("#x")?Number.parseInt(key.slice(2),16):Number.parseInt(key.slice(1),10); return Number.isFinite(code)?String.fromCodePoint(code):entity;
+    });
+    const paragraphs=[...xml.matchAll(/<w:p\b[^>]*>([\s\S]*?)<\/w:p>/gi)].map((match)=>{
+      const body=match[1];
+      const parts=[...body.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi)].map((item)=>decodeXml(item[1]));
+      return parts.join("").replace(/\s+/g," ").trim();
+    }).filter(Boolean);
+    const text=paragraphs.join("\n").trim();
+    onProgress?.(100); return text;
   }
   if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return file.text();
   let text="";
@@ -117,7 +128,32 @@ async function readCvFile(file:File,onProgress?:(value:number)=>void) {
     const pages:string[]=[];
     for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
       const page=await document.getPage(pageNumber); const content=await page.getTextContent();
-      pages.push((content.items as Array<{str?:string}>).map((item)=>item.str??"").join(" "));
+      const items=(content.items as Array<{str?:string;transform?:number[]}>).filter((item)=>String(item.str??"").trim());
+      const positioned=items.map((item)=>({x:Number(item.transform?.[4]??0),y:Math.round(Number(item.transform?.[5]??0)/2)*2,text:String(item.str??"").trim()}));
+      // Group distant horizontal starts into columns. Joining every item by Y
+      // makes a two-column CV read as alternating experience/skills fragments.
+      const starts=[...new Set(positioned.map((item)=>item.x).sort((a,b)=>a-b))];
+      let anchors=[starts[0]];
+      if(starts.length>2 && starts[starts.length-1]-starts[0]>180){
+        let left=starts[0],right=starts[starts.length-1];
+        for(let iteration=0;iteration<4;iteration++){
+          const leftItems=positioned.filter((item)=>Math.abs(item.x-left)<=Math.abs(item.x-right));
+          const rightItems=positioned.filter((item)=>Math.abs(item.x-left)>Math.abs(item.x-right));
+          left=leftItems.reduce((sum,item)=>sum+item.x,0)/Math.max(1,leftItems.length);
+          right=rightItems.reduce((sum,item)=>sum+item.x,0)/Math.max(1,rightItems.length);
+        }
+        anchors=[Math.min(left,right),Math.max(left,right)];
+      }
+      const columns=anchors.map((anchor,index)=>positioned.filter((item)=>{
+        const distances=anchors.map((candidate)=>Math.abs(item.x-candidate));
+        return distances.indexOf(Math.min(...distances))===index;
+      }));
+      const columnText=columns.map((column)=>{
+        const lines=new Map<number,Array<{x:number;text:string}>>();
+        for(const item of column){const current=lines.get(item.y)??[];current.push(item);lines.set(item.y,current);}
+        return [...lines.entries()].sort((a,b)=>b[0]-a[0]).map(([,line])=>line.sort((a,b)=>a.x-b.x).map((item)=>item.text).join(" ")).join("\n");
+      }).filter(Boolean);
+      pages.push(columnText.join("\n\n"));
       onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));
     }
     text=pages.join("\n").replace(/[ \t]+/g," ").trim();
