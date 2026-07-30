@@ -46,13 +46,22 @@ type StructuredAdaptation = {
 };
 
 function formatStructuredAdaptation(result: StructuredAdaptation) {
+  const printable=(value:unknown):string[]=>{
+    if(value===null||value===undefined||value==="")return [];
+    if(typeof value==="string"||typeof value==="number")return String(value).split(/\r?\n/).map((line)=>line.trim()).filter(Boolean);
+    if(Array.isArray(value))return value.flatMap(printable);
+    if(typeof value==="object")return Object.entries(value as Record<string,unknown>).flatMap(([key,item])=>{
+      const values=printable(item); return values.length?values.length===1?[`${key}: ${values[0]}`]:[`${key}:`,...values.map((line)=>`• ${line}`)]:[];
+    });
+    return [];
+  };
   const lines = [String(result.titre_recommande ?? "").trim(), "", "PROFIL", String(result.accroche ?? "").trim(), ""];
-  const skills = Array.isArray(result.competences_cles) ? result.competences_cles : [result.competences_cles];
-  if (skills.some(Boolean)) lines.push("COMPÉTENCES", ...skills.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)), "");
-  const experiences = Array.isArray(result.experiences_optimisees) ? result.experiences_optimisees : [result.experiences_optimisees];
-  if (experiences.some(Boolean)) lines.push("EXPÉRIENCE", ...experiences.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)), "");
-  const keywords = Array.isArray(result.mots_cles_ajustes) ? result.mots_cles_ajustes : [result.mots_cles_ajustes];
-  if (keywords.some(Boolean)) lines.push("MOTS-CLÉS ALIGNÉS", ...keywords.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)));
+  const skills = printable(result.competences_cles);
+  if (skills.length) lines.push("COMPÉTENCES", ...skills, "");
+  const experiences = printable(result.experiences_optimisees);
+  if (experiences.length) lines.push("EXPÉRIENCE", ...experiences, "");
+  const keywords = printable(result.mots_cles_ajustes);
+  if (keywords.length) lines.push("MOTS-CLÉS ALIGNÉS", ...keywords);
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
@@ -80,7 +89,7 @@ INSTRUCTIONS DE RESTRUCTURATION :
 - Accroche / Résumé : Rédige une synthèse de 3-4 lignes orientée impact et valeur ajoutée pour l'entreprise cible, sans ajouter de faits.
 - Compétences : Catégorise clairement (Tech Stack, Soft Skills, Outils / Methodologies).
 - Expériences : Structure chaque expérience au format Action + Contexte + Résultat avec des chiffres d'impact uniquement s'ils sont présents dans le CV.
-- Format : Retourne exclusivement un objet JSON valide avec les clés demandées.`;
+- Format : Retourne exclusivement un objet JSON valide avec les clés demandées. Les compétences et expériences doivent être des tableaux lisibles ; n'encode jamais un objet JSON dans une chaîne de caractères. Si une information n'est pas prouvée par le CV, omets-la.`;
   try {
     response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.1, max_tokens:3000, response_format:{type:"json_object"}, messages:[{role:"system",content:systemPrompt},{role:"user",content:`### OFFRE D'EMPLOI ###\n${offer}\n\n### CV À OPTIMISER ###\n${cv}\n\nFournis le résultat au format JSON avec les clés : "titre_recommande", "accroche", "competences_cles", "experiences_optimisees", "mots_cles_ajustes".`}]}) });
   } finally { clearTimeout(timeout); }
