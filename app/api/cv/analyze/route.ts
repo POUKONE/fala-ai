@@ -39,6 +39,7 @@ export async function POST(request:Request) {
     ok:true,
     summary:summarizeCv(cv,offer),
     adaptedCv:String(result.adaptedCv??""),
+    structured:result.structured??null,
     matchedSkills:result.matchedSkills??[],
     matchedKeywords:result.matchedKeywords??[],
     targetRole:result.targetRole??null,

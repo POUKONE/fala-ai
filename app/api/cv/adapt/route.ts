@@ -37,7 +37,26 @@ function buildLocalAdaptation(cv:string,target:string,matchedSkills:string[]) {
   return output.join("\n").replace(/\n{3,}/g,"\n\n").trim();
 }
 
-async function adaptWithQwen(offer: string, cv: string) {
+type StructuredAdaptation = {
+  titre_recommande?: string;
+  accroche?: string;
+  competences_cles?: unknown;
+  experiences_optimisees?: unknown;
+  mots_cles_ajustes?: unknown;
+};
+
+function formatStructuredAdaptation(result: StructuredAdaptation) {
+  const lines = [String(result.titre_recommande ?? "").trim(), "", String(result.accroche ?? "").trim(), ""];
+  const skills = Array.isArray(result.competences_cles) ? result.competences_cles : [result.competences_cles];
+  if (skills.some(Boolean)) lines.push("COMPÉTENCES", ...skills.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)), "");
+  const experiences = Array.isArray(result.experiences_optimisees) ? result.experiences_optimisees : [result.experiences_optimisees];
+  if (experiences.some(Boolean)) lines.push("EXPÉRIENCE", ...experiences.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)), "");
+  const keywords = Array.isArray(result.mots_cles_ajustes) ? result.mots_cles_ajustes : [result.mots_cles_ajustes];
+  if (keywords.some(Boolean)) lines.push("MOTS-CLÉS ALIGNÉS", ...keywords.filter(Boolean).map((item) => typeof item === "string" ? item : JSON.stringify(item)));
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function adaptWithQwen(offer: string, cv: string): Promise<{ text: string; structured: StructuredAdaptation } | null> {
   const base = String(process.env.AI_BASE_URL ?? "").trim().replace(/\/$/, "");
   if (!base) return null;
   const model = String(process.env.AI_MODEL ?? "Qwen/Qwen3-8B").trim();
@@ -46,12 +65,31 @@ async function adaptWithQwen(offer: string, cv: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
   let response:Response;
+  const systemPrompt = `Tu es un expert en recrutement tech et en optimisation pour les systèmes ATS (Applicant Tracking Systems).
+
+TON OBJECTIF :
+Optimiser le CV fourni pour qu'il corresponde au mieux à l'offre d'emploi cible, tout en garantissant une lisibilité maximale pour les logiciels ATS et les recruteurs humains.
+
+RÈGLES STRICTES DE SÉCURITÉ ET D'ÉTHIQUE :
+1. ZERO HALLUCINATION : N'invente AUCUNE expérience, entreprise, diplôme, date ou compétence non mentionnée dans le CV d'origine.
+2. FIDÉLITÉ : Ne survends pas les responsabilités. Reformule uniquement pour valoriser l'existant.
+3. ALIGNEMENT MOTS-CLÉS : Identifie les mots-clés techniques, outils et compétences clés de l'offre d'emploi qui sont déjà explicitement ou implicitement présents dans le CV, et aligne le vocabulaire uniquement si la compétence est avérée.
+
+INSTRUCTIONS DE RESTRUCTURATION :
+- Titre du CV : Aligne le titre sur l'intitulé du poste ciblé.
+- Accroche / Résumé : Rédige une synthèse de 3-4 lignes orientée impact et valeur ajoutée pour l'entreprise cible, sans ajouter de faits.
+- Compétences : Catégorise clairement (Tech Stack, Soft Skills, Outils / Methodologies).
+- Expériences : Structure chaque expérience au format Action + Contexte + Résultat avec des chiffres d'impact uniquement s'ils sont présents dans le CV.
+- Format : Retourne exclusivement un objet JSON valide avec les clés demandées.`;
   try {
-    response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.15, max_tokens:3000, messages:[{role:"system",content:"Tu es un assistant de recrutement. Réorganise un CV pour les ATS en français et respecte ce modèle A4 sobre : première ligne NOM, deuxième ligne TITRE CIBLE, troisième ligne CONTACT ; ensuite les sections EXPÉRIENCE, FORMATION et COMPÉTENCES. Utilise exclusivement les faits présents dans le CV : n’invente jamais de poste, diplôme, compétence, date ou résultat. Retourne uniquement le CV final en texte brut. Pour une information absente, omets-la plutôt que de la remplacer par un exemple."},{role:"user",content:`OFFRE D'EMPLOI:\n${offer}\n\nCV À RESTRUCTURER:\n${cv}`} ]}) });
+    response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.1, max_tokens:3000, response_format:{type:"json_object"}, messages:[{role:"system",content:systemPrompt},{role:"user",content:`### OFFRE D'EMPLOI ###\n${offer}\n\n### CV À OPTIMISER ###\n${cv}\n\nFournis le résultat au format JSON avec les clés : "titre_recommande", "accroche", "competences_cles", "experiences_optimisees", "mots_cles_ajustes".`}]}) });
   } finally { clearTimeout(timeout); }
   if (!response.ok) return null;
   const data = await response.json().catch(() => ({})) as {choices?:Array<{message?:{content?:string}}>};
-  const content = String(data.choices?.[0]?.message?.content ?? "").replace(/^```(?:text|markdown)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  const raw = String(data.choices?.[0]?.message?.content ?? "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  let structured: StructuredAdaptation;
+  try { structured = JSON.parse(raw) as StructuredAdaptation; } catch { return null; }
+  const content = formatStructuredAdaptation(structured);
   const normalized=normalize(content);
   const headings=["experience","formation","competences","profil"].filter((heading)=>normalized.includes(heading));
   const containsTemplateText=/resumez vos|utilisez la langue|soyez concis|exemple de cv|a completer|placeholder|je ne peux/i.test(normalized);
@@ -59,7 +97,7 @@ async function adaptWithQwen(offer: string, cv: string) {
   // heading checks. Treat that as a failed adaptation and use the deterministic
   // fallback instead of presenting a false positive to the user.
   const unchanged = compact(content) === compact(cv) || (compact(content).length > 0 && compact(cv).includes(compact(content)) && compact(content).length / compact(cv).length > 0.96);
-  return content.length >= 120 && headings.length >= 2 && !containsTemplateText && !unchanged ? content : null;
+  return content.length >= 120 && headings.length >= 2 && !containsTemplateText && !unchanged ? {text:content, structured} : null;
 }
 
 export async function POST(request: Request) {
@@ -85,9 +123,9 @@ export async function POST(request: Request) {
     const target = String(parsed.role ?? "").trim();
     const adapted = buildLocalAdaptation(cv,target,matchedSkills);
     const provider = modelAdapted ? "Qwen3-8B" : "moteur local";
-    const adaptedCv = modelAdapted ?? adapted;
+    const adaptedCv = modelAdapted?.text ?? adapted;
     await recordActivity(user, "cv.adapted", `CV adapté pour ${target || "une offre"} (${provider})`);
-    return Response.json({ ok: true, adaptedCv, matchedSkills, matchedKeywords, targetRole: target, provider, quality: qualityReport(cv, adaptedCv, matchedKeywords), note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
+    return Response.json({ ok: true, adaptedCv, structured: modelAdapted?.structured ?? null, matchedSkills, matchedKeywords, targetRole: target, provider, quality: qualityReport(cv, adaptedCv, matchedKeywords), note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
   } catch (error) {
     try { await logSystemError("/api/cv/adapt", error, user.email); } catch { /* journalisation best-effort */ }
     return Response.json({ error: "Adaptation du CV momentanément indisponible" }, { status: 500 });
