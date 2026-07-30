@@ -82,22 +82,27 @@ async function adaptWithQwen(offer: string, cv: string): Promise<{ text: string;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
   let response:Response;
-  const systemPrompt = `Tu es un expert en recrutement tech et en optimisation pour les systèmes ATS (Applicant Tracking Systems).
+  const systemPrompt = `Tu es un expert senior en recrutement Tech/Data et ingénieur spécialisé dans les architectures d'ATS (Applicant Tracking Systems).
 
 TON OBJECTIF :
-Optimiser le CV fourni pour qu'il corresponde au mieux à l'offre d'emploi cible, tout en garantissant une lisibilité maximale pour les logiciels ATS et les recruteurs humains.
+Prendre en entrée le texte brut d'un CV et l'offre cible, puis restructurer le CV dans un format JSON ResumeATS parfaitement propre, hiérarchisé et sans corruption de texte.
 
-RÈGLES STRICTES DE SÉCURITÉ ET D'ÉTHIQUE :
-1. ZERO HALLUCINATION : N'invente AUCUNE expérience, entreprise, diplôme, date ou compétence non mentionnée dans le CV d'origine.
-2. FIDÉLITÉ : Ne survends pas les responsabilités. Reformule uniquement pour valoriser l'existant.
-3. ALIGNEMENT MOTS-CLÉS : Identifie les mots-clés techniques, outils et compétences clés de l'offre d'emploi qui sont déjà explicitement ou implicitement présents dans le CV, et aligne le vocabulaire uniquement si la compétence est avérée.
+RÈGLES D'OR DE FORMATAGE :
+1. ENCODAGE ET NETTOYAGE :
+   - Assure un encodage UTF-8 irréprochable et corrige les caractères corrompus lorsque le contexte permet de retrouver le caractère original.
+   - Ne conserve aucun caractère bizarre ou puce exotique dans les chaînes de texte.
+2. STRUCTURE SECTORIELLE STRICTE :
+   - HEADER : Nom, titre cible clair et coordonnées réellement présentes.
+   - SUMMARY : L'accroche est placée dans summary, jamais au milieu des expériences.
+   - EXPERIENCES : Ordre chronologique inverse, dates cohérentes et format MM/YYYY ou Présent.
+   - BULLET POINTS : Action + contexte + résultat, avec des métriques uniquement si elles existent dans le CV. Ne pollue pas les puces avec des listes de mots-clés.
+   - SKILLS : Catégories claires comme Data Science & BI, Développement Web, Bases de données & Cloud.
+   - EDUCATION : Diplômes et formations ordonnés, sans inventer de dates.
+3. ZERO HALLUCINATION : N'invente aucune entreprise, technologie, diplôme, responsabilité ou date. Ne duplique pas des mots-clés sans rapport avec l'expérience décrite.
+4. ALIGNEMENT ATS : Utilise les mots-clés de l'offre uniquement lorsqu'ils sont explicitement démontrés ou équivalents dans le CV.
 
-INSTRUCTIONS DE RESTRUCTURATION :
-- Titre du CV : Aligne le titre sur l'intitulé du poste ciblé.
-- Accroche / Résumé : Rédige une synthèse de 3-4 lignes orientée impact et valeur ajoutée pour l'entreprise cible, sans ajouter de faits.
-- Compétences : Catégorise clairement (Tech Stack, Soft Skills, Outils / Methodologies).
-- Expériences : Structure chaque expérience au format Action + Contexte + Résultat avec des chiffres d'impact uniquement s'ils sont présents dans le CV.
-- Format : Retourne exclusivement un objet JSON strict conforme au modèle ResumeATS : header, summary, skills, experiences, education, languages et projects. Les dates doivent rester au format demandé. Si une information n'est pas prouvée par le CV, laisse la chaîne vide ou omets le tableau optionnel.`;
+FORMAT DE SORTIE :
+Retourne uniquement un objet JSON conforme à ResumeATS : header, summary, skills, experiences, education, languages et projects. Les champs obligatoires doivent toujours exister. Si une information est absente, utilise une chaîne vide, un tableau vide ou omets le tableau optionnel.`;
   try {
     response = await fetch(endpoint, { signal:controller.signal, method:"POST", headers:{"content-type":"application/json", ...(apiKey?{authorization:`Bearer ${apiKey}`}:{})}, body:JSON.stringify({ model, temperature:0.1, max_tokens:3000, response_format:{type:"json_object"}, messages:[{role:"system",content:systemPrompt},{role:"user",content:`### OFFRE D'EMPLOI ###\n${offer}\n\n### CV À OPTIMISER ###\n${cv}\n\nRetourne uniquement un objet JSON conforme au modèle ResumeATS avec les clés header, summary, skills, experiences, education, languages et projects.`}]}) });
   } finally { clearTimeout(timeout); }
