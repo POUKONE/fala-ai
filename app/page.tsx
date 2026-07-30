@@ -22,14 +22,18 @@ type NotificationReminder = {id:number;type:string;date:string;company:string;ro
 
 const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
-const scoreMaximums:Record<string,number> = {skills:30,title:15,experience:15,education:10,location:10,contract:10,languages:5,sector:3,salary:2};
+const scoreMaximums:Record<string,number> = {skills:35,title:15,experience:15,location:10,education:10,contract:5,languages:5,salary:5};
 const scoreNames:Record<string,string> = {skills:"Compétences",title:"Intitulé du poste",experience:"Expérience",education:"Études",location:"Localisation",contract:"Contrat",languages:"Langues",sector:"Secteur",salary:"Salaire"};
 
 function parseScoreBreakdown(value:unknown):Record<string,number>|null {
   if (!value) return null;
   const parsed = typeof value === "string" ? (() => { try { return JSON.parse(value) as unknown; } catch { return null; } })() : value;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  return Object.fromEntries(Object.entries(parsed).filter(([, item]) => typeof item === "number")) as Record<string,number>;
+  return Object.fromEntries(Object.entries(parsed).flatMap(([key,item]) => {
+    if(typeof item === "number") return [[key,item]];
+    if(item && typeof item === "object" && !Array.isArray(item) && typeof (item as {weightedScore?:unknown}).weightedScore === "number") return [[key,(item as {weightedScore:number}).weightedScore]];
+    return [];
+  })) as Record<string,number>;
 }
 
 function formatDate(value:string|null) {
