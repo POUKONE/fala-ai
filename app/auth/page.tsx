@@ -16,6 +16,7 @@ declare global {
 
 function AuthPageContent() {
   const params = useSearchParams();
+  const requiresFreshAuth = params.get("reauth") === "1";
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : params.get("mode") === "reset" ? "reset" : "login");
   // Read the token from the current URL on every render. Keeping it in state
   // can leave it empty after the browser hydrates a password-reset link.
@@ -100,13 +101,13 @@ function AuthPageContent() {
       <div className="auth-pitch"><span className="public-kicker">VOTRE RECHERCHE, SOUS CONTRÔLE</span><h1>Un espace privé,<br/><em>vraiment à vous.</em></h1><p>Retrouvez vos candidatures et votre historique à chaque connexion. Vos données restent isolées et exportables.</p><div className="auth-points"><span>✓ Compte e-mail autonome</span><span>✓ Connexion sécurisée</span><span>✓ Historique conservé</span></div></div>
       <div className="auth-card">
         <div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>Connexion</button><button className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>Inscription</button></div>
-        <h2>{title}</h2><p className="auth-subtitle">{mode === "forgot" ? "Saisissez votre adresse et nous vous aiderons à retrouver votre compte." : "Utilisez votre adresse e-mail et un mot de passe."}</p>
+        <h2>{title}</h2><p className="auth-subtitle">{requiresFreshAuth && mode === "login" ? "Pour votre sécurité, reconnectez-vous dans ce nouvel onglet." : mode === "forgot" ? "Saisissez votre adresse et nous vous aiderons à retrouver votre compte." : "Utilisez votre adresse e-mail et un mot de passe."}</p>
         {error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}
-        <form onSubmit={submit}>
+        <form onSubmit={submit} autoComplete="off">
           {mode === "register" && <label>Nom complet affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Ex. Ibrahim POUKONE" minLength={2} maxLength={120} required /><small>Ce nom sera visible dans votre espace Fala AI.</small></label>}
-          {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>}
+          {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" required /></label>}
           {mode === "register" && signupStep === "code" && <label>Code reçu par e-mail<input inputMode="numeric" pattern="[0-9]{6}" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={6} autoComplete="one-time-code" required /><small>Le code est valable 10 minutes</small></label>}
-          {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === "register" || mode === "reset" ? "new-password" : "current-password"} required /><small>8 caractères minimum</small></label>}
+          {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete="new-password" required /><small>8 caractères minimum</small></label>}
           {mode === "login" && captchaRequired && <div className="auth-captcha"><div ref={captchaContainer} /><small>Une vérification anti-abus peut être demandée après plusieurs tentatives.</small></div>}
           {mode === "register" && <label className="auth-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />J’accepte la <Link href="/privacy" target="_blank">politique de confidentialité</Link> et les <Link href="/terms" target="_blank">conditions d’utilisation</Link>.</label>}
           <button className="auth-submit" disabled={busy}>{busy ? "Veuillez patienter…" : mode === "register" ? (signupStep === "email" ? "Recevoir le code" : signupStep === "code" ? "Valider le code" : "Créer mon compte") : mode === "forgot" ? "Envoyer le lien" : "Se connecter"}</button>
