@@ -173,7 +173,22 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
   const task=readCvFileInternal(file,options);
   let timer:ReturnType<typeof setTimeout>|undefined;
   const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error("La lecture du fichier dépasse le délai maximal de 60 secondes.")),CV_READ_TIMEOUT);});
-  try { return await Promise.race([task,timeout]); } finally { if(timer) clearTimeout(timer); }
+  try {
+    let localText=""; let localError:unknown=null;
+    try { localText=await Promise.race([task,timeout]); } catch(error) { localError=error; }
+    if(localText.trim().length>=80 || !file.name.toLowerCase().endsWith(".pdf")) {
+      if(localError) throw localError;
+      return localText;
+    }
+    const form=new FormData(); form.append("file",file,file.name);
+    const response=await csrfFetch("/api/cv/extract",{method:"POST",body:form});
+    const body=await response.json().catch(()=>({})) as {text?:string;error?:string};
+    if(!response.ok || !body.text) {
+      if(localError) throw localError;
+      return localText;
+    }
+    return body.text;
+  } finally { if(timer) clearTimeout(timer); }
 }
 
 async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
