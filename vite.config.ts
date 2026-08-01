@@ -41,8 +41,13 @@ export default defineConfig(async () => {
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
-  // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import("@cloudflare/vite-plugin");
+  // The Cloudflare worker adapter must not be included in Vercel's Nitro
+  // bundle: both adapters provide a worker entry, and mixing them makes the
+  // Vercel function call the wrong default export at runtime.
+  const isVercel = process.env.VERCEL === "1";
+  const cloudflarePlugin = isVercel
+    ? null
+    : (await import("@cloudflare/vite-plugin")).cloudflare;
 
   return {
     server: isCodexSeatbeltSandbox
@@ -52,11 +57,15 @@ export default defineConfig(async () => {
       vinext(),
       nitro(),
       sites(),
-      cloudflare({
-        viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
-        inspectorPort: false,
-        config: localBindingConfig,
-      }),
+      ...(cloudflarePlugin
+        ? [
+            cloudflarePlugin({
+              viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
+              inspectorPort: false,
+              config: localBindingConfig,
+            }),
+          ]
+        : []),
     ],
   };
 });
