@@ -160,7 +160,14 @@ const CV_MAX_TEXT = 120_000;
 const CV_MAX_PAGES = 8;
 const CV_READ_TIMEOUT = 60_000;
 
-function hasBytes(bytes:Uint8Array, expected:number[]) { return expected.every((value,index)=>bytes[index]===value); }
+function hasBytes(bytes:Uint8Array, expected:number[], offset=0) { return expected.every((value,index)=>bytes[offset+index]===value); }
+function hasPdfHeader(bytes:Uint8Array) {
+  // A few export tools prepend a small binary preamble before %PDF. Accept
+  // it while still requiring the genuine PDF signature near the beginning.
+  const limit=Math.min(bytes.length-5,1024);
+  for(let offset=0;offset<=limit;offset++) if(hasBytes(bytes,[0x25,0x50,0x44,0x46,0x2d],offset)) return true;
+  return false;
+}
 
 async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
   const task=readCvFileInternal(file,options);
@@ -175,7 +182,7 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
   onProgress?.(5);
   const filename=file.name.toLowerCase();
   const bytes=new Uint8Array(await file.arrayBuffer());
-  const isPdf=hasBytes(bytes,[0x25,0x50,0x44,0x46]);
+  const isPdf=hasPdfHeader(bytes);
   const isDocx=hasBytes(bytes,[0x50,0x4b,0x03,0x04]);
   const textExtension=/\.(txt|md|csv)$/i.test(filename);
   const declaredDocx=file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -223,7 +230,7 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
     // bundler). Le traitement sans worker est volontaire ici : les CV sont
     // limités à 8 pages et cela garantit une lecture fiable sans dépendance
     // à un chemin d'asset ou à un CDN externe.
-    const pdfOptions={data:bytes,useSystemFonts:true,disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+    const pdfOptions={data:bytes,useSystemFonts:true,disableWorker:true,isEvalSupported:false} as unknown as Parameters<typeof pdfjs.getDocument>[0];
     const document=await pdfjs.getDocument(pdfOptions).promise;
     if(document.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
     const pages:string[]=[];
@@ -267,7 +274,7 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
     try {
       onProgress?.(15);
       const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const options={data:bytes,useSystemFonts:true,disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+      const options={data:bytes,useSystemFonts:true,disableWorker:true,isEvalSupported:false} as unknown as Parameters<typeof pdfjs.getDocument>[0];
       const pdfDocument=await pdfjs.getDocument(options).promise;
       if(pdfDocument.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
       const { createWorker } = await import("tesseract.js");
