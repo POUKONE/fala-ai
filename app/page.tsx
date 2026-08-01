@@ -423,6 +423,7 @@ export default function Home() {
   }
 
   function openInterviewPrep(application:Application) {
+    setSelected(null);
     setInterviewPrepState(application); setPrepMode("guide"); setPrepQuestionIndex(0); setPrepAnswer(""); setPrepFeedback("");
   }
   function setInterviewPrep(application:Application|null) {
@@ -488,6 +489,23 @@ export default function Home() {
     attachSuggestions("location","fala-location-suggestions");
     attachSuggestions("sector","fala-sector-suggestions");
     attachSuggestions("sectors","fala-sector-suggestions");
+    const offerInput=document.querySelector<HTMLInputElement>('[aria-labelledby="import-title"] .file-picker input');
+    if(!offerInput)return;
+    offerInput.accept=".pdf,.docx,.txt,.md,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv";
+    const handleOfferFile=async(event:Event)=>{
+      event.stopImmediatePropagation();
+      const file=(event.target as HTMLInputElement).files?.[0];
+      if(!file)return;
+      setSaving(true); setError("");
+      try{
+        const isText=/\.(txt|md|csv)$/i.test(file.name);
+        const text=isText?sanitizeExtractedCvText(await file.text()):await readCvFile(file);
+        setOfferText(text);
+      }catch(cause){setError(cause instanceof Error?cause.message:"Lecture de l’annonce impossible");}
+      finally{setSaving(false);}
+    };
+    offerInput.addEventListener("change",handleOfferFile);
+    return()=>offerInput.removeEventListener("change",handleOfferFile);
   },[modal]);
   useEffect(()=>{ if (modal !== "privacy" || !currentUser) return; setSessionsLoading(true); void csrfFetch("/api/account/sessions",{cache:"no-store"}).then(async(response)=>{const body=await response.json().catch(()=>({}));if(response.ok)setSessions(body.sessions??[]);}).finally(()=>setSessionsLoading(false)); },[modal,currentUser]);
 

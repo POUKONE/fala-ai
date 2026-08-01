@@ -186,6 +186,8 @@ footer { padding:25px 2px 5px; display:flex; justify-content:space-between; colo
 .interview-hub { margin-top:15px; padding:22px; border:1px solid #ded9f4; border-radius:15px; background:linear-gradient(135deg,#fff 0%,#faf8ff 100%); box-shadow:0 12px 30px #2720440b; }
 .interview-hub .section-title { align-items:flex-start; }
 .interview-hub .section-title h2 { margin-top:5px; }
+.interview-hub .section-title > button.primary { color:#fff; background:#1d1b26; }
+.interview-hub .section-title > button.primary:hover { color:#fff; background:#5131ea; }
 .interview-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:18px; }
 .interview-grid article { padding:16px; border:1px solid #ebe8f2; border-radius:11px; background:#fff; }
 .interview-grid article > span { color:#6952d0; font-size:8px; font-weight:900; letter-spacing:1px; }
