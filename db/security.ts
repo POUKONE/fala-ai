@@ -44,6 +44,82 @@ export async function enforceRateLimit(identity: string, action: string, limit =
   return true;
 }
 
+export function getClientIp(request: Request) {
+  // Vercel sets these headers at the edge. Prefer the platform-provided
+  // address, then fall back to the first forwarded hop for local proxies.
+  return request.headers.get("x-real-ip")?.trim()
+    || request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
+    || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || "unknown";
+}
+
+type LoginFailure = {
+  identity: string;
+  failed_count: number;
+  first_failed_at: string;
+  locked_until: string | null;
+  updated_at: string;
+};
+
+async function ensureLoginFailuresTable() {
+  const db = getPostgresDb();
+  try {
+    await db.prepare("SELECT identity FROM auth_login_failures LIMIT 1").all();
+  } catch (error) {
+    if (!/no such table|does not exist/i.test(String(error))) throw error;
+    await db.prepare("CREATE TABLE IF NOT EXISTS auth_login_failures (identity TEXT PRIMARY KEY NOT NULL, failed_count INTEGER NOT NULL DEFAULT 0, first_failed_at TEXT NOT NULL, locked_until TEXT, updated_at TEXT NOT NULL)").run();
+  }
+}
+
+export async function getLoginLock(identity: string) {
+  await ensureLoginFailuresTable();
+  const row = await getPostgresDb().prepare("SELECT identity,failed_count,first_failed_at,locked_until,updated_at FROM auth_login_failures WHERE identity=?")
+    .bind(identity.toLowerCase()).first<LoginFailure>();
+  if (!row?.locked_until) return row;
+  if (new Date(row.locked_until).getTime() > Date.now()) return row;
+  await getPostgresDb().prepare("DELETE FROM auth_login_failures WHERE identity=?").bind(identity.toLowerCase()).run();
+  return null;
+}
+
+export async function recordLoginFailure(identities: string[], windowSeconds = 900, maxFailures = 5, lockSeconds = 900) {
+  await ensureLoginFailuresTable();
+  const db = getPostgresDb();
+  const now = new Date();
+  const first = new Date(now.getTime() - windowSeconds * 1000).toISOString();
+  for (const raw of identities) {
+    const identity = raw.toLowerCase();
+    const current = await db.prepare("SELECT identity,failed_count,first_failed_at,locked_until,updated_at FROM auth_login_failures WHERE identity=?")
+      .bind(identity).first<LoginFailure>();
+    const count = current && current.first_failed_at > first ? current.failed_count + 1 : 1;
+    const lockedUntil = count >= maxFailures ? new Date(now.getTime() + lockSeconds * 1000).toISOString() : null;
+    await db.prepare("INSERT INTO auth_login_failures (identity,failed_count,first_failed_at,locked_until,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(identity) DO UPDATE SET failed_count=excluded.failed_count,first_failed_at=excluded.first_failed_at,locked_until=excluded.locked_until,updated_at=excluded.updated_at")
+      .bind(identity, count, current && current.first_failed_at > first ? current.first_failed_at : now.toISOString(), lockedUntil, now.toISOString()).run();
+  }
+}
+
+export async function clearLoginFailures(identities: string[]) {
+  await ensureLoginFailuresTable();
+  const db = getPostgresDb();
+  await Promise.all(identities.map((identity) => db.prepare("DELETE FROM auth_login_failures WHERE identity=?").bind(identity.toLowerCase()).run()));
+}
+
+export async function verifyTurnstile(token: string | undefined, ip: string) {
+  const secret = String(process.env.TURNSTILE_SECRET_KEY ?? "").trim();
+  if (!secret) return { configured: false, success: false };
+  if (!token) return { configured: true, success: false };
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secret, response: token, remoteip: ip === "unknown" ? undefined : ip }),
+    });
+    const result = await response.json() as { success?: boolean };
+    return { configured: true, success: response.ok && result.success === true };
+  } catch {
+    return { configured: true, success: false };
+  }
+}
+
 export async function logSystemError(route: string, error: unknown, userEmail?: string | null) {
   const message = error instanceof Error ? error.message : String(error ?? "Erreur inconnue");
   await getPostgresDb().prepare("INSERT INTO system_errors (user_email,route,message,created_at) VALUES (?,?,?,?)")
