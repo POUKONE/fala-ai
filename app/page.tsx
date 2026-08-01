@@ -645,7 +645,7 @@ export default function Home() {
     const response=await csrfFetch(`/api/applications/${selected.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const data=await response.json(); setSaving(false);
     if(!response.ok){setError(data.error??"Mise à jour impossible");return;}
-    setApplications((current)=>current.map((a)=>a.id===selected.id?data.application:a)); setSelected(data.application); notify("Candidature mise à jour");
+    setApplications((current)=>current.map((a)=>a.id===selected.id?data.application:a)); setSelected(null); notify("Candidature mise à jour");
   }
 
   async function removeApplication() {
