@@ -9,16 +9,18 @@ export async function POST(request: Request) {
   const body = await request.json() as { email?: string; password?: string; displayName?: string; consent?: boolean };
   const email = String(body.email ?? "").trim().toLowerCase();
   const password = String(body.password ?? "");
-  const name = String(body.displayName ?? "").trim().slice(0, 120) || email.split("@")[0];
-  if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8) return Response.json({ error: "Adresse valide et mot de passe de 8 caractères minimum requis" }, { status: 400 });
+  const submittedName = String(body.displayName ?? "").trim().slice(0, 120);
+  if (!/^\S+@\S+\.\S+$/.test(email) || submittedName.length < 2 || password.length < 8) return Response.json({ error: "Nom, adresse valide et mot de passe de 8 caractères minimum requis" }, { status: 400 });
   if (!body.consent) return Response.json({ error: "Votre consentement est requis pour créer le compte" }, { status: 400 });
   const db = getPostgresDb();
   const existing = await db.prepare("SELECT email,password_hash FROM users WHERE lower(email)=lower(?)").bind(email).first<{email:string;password_hash:string|null}>();
   // A verified address without a password is an interrupted registration, not
   // an occupied account. Allow the user to finish it after a transient error.
   if (existing?.password_hash) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 });
-  const challenge = await db.prepare("SELECT verified_at FROM signup_challenges WHERE lower(email)=lower(?)").bind(email).first<{verified_at:string|null}>();
+  const challenge = await db.prepare("SELECT display_name,verified_at FROM signup_challenges WHERE lower(email)=lower(?)").bind(email).first<{display_name:string;verified_at:string|null}>();
   if (!challenge?.verified_at) return Response.json({ error: "Vérifiez d’abord votre adresse e-mail avec le code reçu" }, { status: 400 });
+  if (challenge.display_name !== submittedName) return Response.json({ error: "Le nom doit rester identique à celui validé au début de l’inscription" }, { status: 400 });
+  const name = challenge.display_name;
   let authResult;
   try { authResult = await supabaseSignUp(email, password, name); } catch (error) { const message = error instanceof Error ? error.message : "Impossible de créer le compte"; if (/already|registered|exists|occup/i.test(message)) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 }); return Response.json({ error: message }, { status: 400 }); }
   const now = new Date().toISOString();

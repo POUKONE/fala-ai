@@ -9,7 +9,9 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const body = await request.json() as { email?: string; displayName?: string; consent?: boolean };
   const email = String(body.email ?? "").trim().toLowerCase();
+  const name = String(body.displayName ?? "").trim().slice(0, 120);
   if (!/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "Adresse e-mail valide requise" }, { status: 400 });
+  if (name.length < 2) return Response.json({ error: "Votre nom est requis pour créer le compte" }, { status: 400 });
   if (!body.consent) return Response.json({ error: "Votre consentement est requis pour créer le compte" }, { status: 400 });
   if (!await enforceRateLimit(email, "signup-code", 3, 900)) return Response.json({ error: "Trop de demandes. Réessayez dans quelques minutes." }, { status: 429 });
   const db = getPostgresDb();
@@ -24,7 +26,6 @@ export async function POST(request: Request) {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = await hashPassword(code);
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  const name = String(body.displayName ?? "").trim().slice(0, 120) || email.split("@")[0];
   await db.prepare("INSERT INTO signup_challenges (email,display_name,code_hash,expires_at,attempts,verified_at,created_at) VALUES (?,?,?,?,0,NULL,?) ON CONFLICT(email) DO UPDATE SET display_name=excluded.display_name,code_hash=excluded.code_hash,expires_at=excluded.expires_at,attempts=0,verified_at=NULL,created_at=excluded.created_at")
     .bind(email, name, codeHash, expires, new Date().toISOString()).run();
   const delivery = await sendTransactionalMail({
