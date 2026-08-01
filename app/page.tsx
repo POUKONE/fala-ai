@@ -440,8 +440,15 @@ export default function Home() {
   function nextInterviewQuestion() {
     if (!interviewPrep) return;
     const questions = interviewQuestions(interviewPrep);
-    if (prepQuestionIndex >= questions.length - 1) { setPrepFeedback("Simulation terminée. Relisez vos réponses et notez un exemple chiffré à réutiliser."); return; }
+    if (prepQuestionIndex >= questions.length - 1) { setInterviewPrepState(null); setPrepAnswer(""); setPrepFeedback(""); notify("Simulation terminée"); return; }
     setPrepQuestionIndex((current)=>current+1); setPrepAnswer(""); setPrepFeedback("");
+  }
+
+  function finishInterviewPrep() {
+    setInterviewPrepState(null);
+    setPrepAnswer("");
+    setPrepFeedback("");
+    notify("Simulation terminée");
   }
 
   const loadData = useCallback(async () => {
