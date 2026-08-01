@@ -2,6 +2,7 @@ import { getPostgresDb } from "../../../../db/postgres";
 import { enforceRateLimit } from "../../../../db/security";
 import { sendTransactionalMail } from "../../../../db/mailer";
 import { hashPassword } from "../../../email-auth";
+import { supabaseAdminDeleteOrphan } from "../../../supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,12 @@ export async function POST(request: Request) {
   const db = getPostgresDb();
   const existing = await db.prepare("SELECT email,password_hash FROM users WHERE lower(email)=lower(?)").bind(email).first<{email:string;password_hash:string|null}>();
   if (existing?.password_hash) return Response.json({ error: "Cette adresse est déjà occupée" }, { status: 409 });
+  // A previous password step may have created a Supabase Auth identity before
+  // the application row was committed. It is not a finalized account, so
+  // remove that orphan and let the candidate restart verification.
+  try { await supabaseAdminDeleteOrphan(email); } catch (error) {
+    console.error("[signup] orphan identity cleanup failed", error);
+  }
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const codeHash = await hashPassword(code);
   const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
