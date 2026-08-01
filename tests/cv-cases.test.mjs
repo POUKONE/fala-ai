@@ -9,6 +9,7 @@ const requiredCases = [
   "02-flattened-pdf.txt",
   "03-no-headings.txt",
   "04-multilingual-certifications.txt",
+  "05-export-word-glyphs.txt",
 ];
 
 test("keeps representative CV parsing cases available", async () => {

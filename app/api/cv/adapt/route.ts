@@ -40,6 +40,12 @@ function usefulCvLine(line:string) { return line.length>1 && !/r[eé]sumez vos r
 const DATE_TOKEN = `(?:\\d{1,2}[\\/. -]\\d{4}|(?:19|20)\\d{2}|20xx|(?:jan(?:v(?:ier|uary)?)?|feb(?:r(?:ier|uary)?)?|mar(?:s|ch)?|apr(?:il)?|mai|may|juin|june|juil(?:let|y)?|july|ao[uû]t|aug(?:ust)?|sept?(?:embre|ember)?|oct(?:obre|ober)?|nov(?:embre|ember)?|d[eé]c(?:embre|ember)?)\\s+(?:19|20)\\d{2}|(?:jan(?:v(?:ier|uary)?)?|feb(?:r(?:ier|uary)?)?|mar(?:s|ch)?|apr(?:il)?|mai|may|juin|june|juil(?:let|y)?|july|ao[uû]t|aug(?:ust)?|sept?(?:embre|ember)?|oct(?:obre|ober)?|nov(?:embre|ember)?|d[eé]c(?:embre|ember)?)\\s+20xx)`;
 const DATE_LINE = new RegExp(`^${DATE_TOKEN}\\s*(?:[-–—]|à|a|aujourd'hui|present|présent)?`, "i");
 function isDateLine(line:string) { return DATE_LINE.test(line.trim()); }
+function normalizeDateRange(line:string) {
+  const match=line.match(/^(\d{1,2}[\/.-]\d{4}|(?:19|20)\d{2})\s*[-–—]\s*(\d{1,2}[\/.-]\d{4}|(?:19|20)\d{2})(.*)$/);
+  if(!match) return line;
+  const value=(date:string)=>{const parts=date.match(/(\d{1,2})[\/.-](\d{4})/);return parts?Number(parts[2])*100+Number(parts[1]):Number(date)*100;};
+  return value(match[1])>value(match[2]) ? `${match[2]} - ${match[1]}${match[3]}` : line;
+}
 function splitEmbeddedSections(text:string) {
   return text
     // Les rubriques PDF sont généralement en capitales. Limiter cette
@@ -58,7 +64,7 @@ export function buildLocalAdaptation(cv:string,target:string,matchedSkills:strin
     .replace(/([\p{L}]+)-[ \t]*\n[ \t]*([\p{Ll}]+)/gu, (_match,left,right)=>left.length>=6 && right.length<=3 ? `${left} ${right}` : `${left}${right}`)
     .replace(/\s+(?=(?:langues?|languages?|centres? d['’ ]int[eé]r[eê]t|certifications?(?:\s+et\s+formations?)?|formations?\s+et\s+certifications?)\s*:)/gi,"\n")
     .replace(/\s+(?=\d{1,2}[\/.-]\d{4}\s*(?:[-–—]|à|a)\s*\d{1,2}[\/.-]?\d{0,4})/g,"\n"));
-  const lines=prepared.split(/\r?\n/).map((line)=>line.trim()).filter(usefulCvLine);
+  const lines=prepared.split(/\r?\n/).map((line)=>normalizeDateRange(line.trim())).filter(usefulCvLine);
   // Les trois premières lignes correspondent généralement au nom, au titre
   // et aux coordonnées. Le texte qui suit avant la première expérience est
   // conservé comme résumé, même si le CV ne possède pas de titre « Profil ».

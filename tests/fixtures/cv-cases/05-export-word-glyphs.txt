@@ -1,0 +1,22 @@
+Candidat Exemple
+ALTERNANCE - Informatique | candidat05@example.test | Paris, France | LinkedIn
+PROFIL CIBLE
+Analyste data en formation, avec une expérience en tableaux de bord et analyse statistique.
+EXPERIENCE
+06/2024 - 08/2024
+Stagiaire analyse de données — Entreprise Exemple, Cameroun
+“ Conception de tableaux de bord sous Power BI et amélioration de la clarté des rapports.
+“ Analyse de données en Python et R pour identifier des tendances.
+07/2023 - 09/2023
+Stagiaire analyste de données — Société Exemple, Cameroun
+“ Implémentation d'un modèle de régression avec une précision de 85%.
+01/2019 - 08/2018
+Projet assistant numérique
+“ Développement d'un outil automatisé réduisant le temps de rédaction.
+FORMATION
+2024 - À ce jour Cycle ingénieur — École Exemple, France
+2022 - 2024 Cycle préparatoire — Prépa Exemple, Cameroun
+COMPETENCES
+Power BI, Python, R, SQL, Excel, Git
+LANGUES
+Français courant, anglais professionnel

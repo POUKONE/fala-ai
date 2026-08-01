@@ -118,6 +118,19 @@ function sanitizeExtractedCvText(value:string) {
     .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
     .replace(/â€™|â€˜/g, "'").replace(/â€œ|â€/g, '"').replace(/â€“|â€”|â€\u0093|â€\u0094/g, "-")
     .replace(/dâ\s*experience/gi, "d'expérience")
+    // Certains PDF exportés depuis Word encodent les puces et séparateurs
+    // comme des glyphes isolés (par ex. “, ‰). Les convertir ici évite qu'ils
+    // se retrouvent au milieu des intitulés ou des coordonnées.
+    .replace(/[“”]/g, "\n")
+    .replace(/[‰]/g, " | ")
+    .replace(/\b([dls])\s{2,}(?=[a-zà-ÿ])/gi, "$1'")
+    .replace(/\bC\s+ameroun\b/gi, "Cameroun")
+    .replace(/\balt\s+ernant\b/gi, "alternant")
+    .replace(/\bdecisi\s+on\b/gi, "decision")
+    .replace(/\bpro\s+jets\b/gi, "projets")
+    .replace(/\bIm\s+plementation\b/gi, "Implementation")
+    .replace(/\bDeveloppe\s+ment\b/gi, "Developpement")
+    .replace(/\bOptimisa\s+tion\b/gi, "Optimisation")
     // Recompose uniquement les mots coupés par un retour de ligne PDF ; les
     // vrais mots composés avec un espace autour du tiret restent inchangés.
     .replace(/([\p{L}]+)-[ \t]*\n[ \t]*([\p{Ll}]+)/gu, (_match,left,right)=>left.length>=6 && right.length<=3 ? `${left} ${right}` : `${left}${right}`)
