@@ -7,6 +7,21 @@ export const dynamic = "force-dynamic";
 
 function normalize(value: string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function compact(value: string) { return normalize(value).replace(/[^a-z0-9]+/g, ""); }
+function repairText(value: string) {
+  return value
+    .replace(/â€™|â/g, "'")
+    .replace(/â€˜|â/g, "'")
+    .replace(/â€œ|â/g, '"')
+    .replace(/â€|â/g, '"')
+    .replace(/â€“|â€”|â|â/g, "-")
+    .replace(/â€¦|â¦/g, "...")
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/dâ\s*experience/gi, "d'expérience")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/[\uFFFD]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 function qualityReport(source: string, output: string, matchedKeywords: string[]) {
   const normalized = normalize(output);
   const sections = ["experience", "formation", "competences", "profil"].filter((section) => normalized.includes(section));
@@ -51,8 +66,8 @@ function splitEmbeddedSections(text:string) {
     // Les rubriques PDF sont généralement en capitales. Limiter cette
     // séparation aux capitales évite de couper une phrase comme « expérience
     // en analyse » au milieu du résumé.
-    .replace(/\s+(?=(?:EXPÉRIENCES?|EXPERIENCES?|PARCOURS PROFESSIONNEL|PROFESSIONAL EXPERIENCE|FORMATIONS?|EDUCATION|ÉTUDES|ETUDES|DIPLÔMES?|DIPLOMES?|COMPÉTENCES?|COMPETENCES?|SKILLS|SAVOIR[- ]FAIRE|LANGUES?|LANGUAGES?|PROJETS?|PROJECTS?|CENTRES? D['’]INTÉRÊT|LOISIRS?)\b)/g, "\n")
-    .replace(/(^|\n)\s*(EXPÉRIENCES?|EXPERIENCES?|PARCOURS PROFESSIONNEL|PROFESSIONAL EXPERIENCE|FORMATIONS?|EDUCATION|ÉTUDES|ETUDES|DIPLÔMES?|DIPLOMES?|COMPÉTENCES?|COMPETENCES?|SKILLS|SAVOIR[- ]FAIRE|LANGUES?|LANGUAGES?|PROJETS?|PROJECTS?|CENTRES? D['’]INTÉRÊT|LOISIRS?)\s*:?[ \t]+(?=\S)/gm, "$1$2\n")
+    .replace(/\s+(?=(?:PROFIL|PROFILE|RÉSUMÉ|RESUME|SUMMARY|OBJECTIF|EXPÉRIENCES?|EXPERIENCES?|PARCOURS PROFESSIONNEL|PROFESSIONAL EXPERIENCE|FORMATIONS?|EDUCATION|ÉTUDES|ETUDES|DIPLÔMES?|DIPLOMES?|COMPÉTENCES?|COMPETENCES?|SKILLS|SAVOIR[- ]FAIRE|LANGUES?|LANGUAGES?|PROJETS?|PROJECTS?|CENTRES? D['’]INTÉRÊT|LOISIRS?)\b)/g, "\n")
+    .replace(/(^|\n)\s*(PROFIL|PROFILE|RÉSUMÉ|RESUME|SUMMARY|OBJECTIF|EXPÉRIENCES?|EXPERIENCES?|PARCOURS PROFESSIONNEL|PROFESSIONAL EXPERIENCE|FORMATIONS?|EDUCATION|ÉTUDES|ETUDES|DIPLÔMES?|DIPLOMES?|COMPÉTENCES?|COMPETENCES?|SKILLS|SAVOIR[- ]FAIRE|LANGUES?|LANGUAGES?|PROJETS?|PROJECTS?|CENTRES? D['’]INTÉRÊT|LOISIRS?)\s*:?[ \t]+(?=\S)/gm, "$1$2\n")
     .replace(/\n{3,}/g, "\n\n");
 }
 export function buildLocalAdaptation(cv:string,target:string,matchedSkills:string[],matchedKeywords:string[] = []) {
@@ -64,11 +79,14 @@ export function buildLocalAdaptation(cv:string,target:string,matchedSkills:strin
     .replace(/([\p{L}]+)-[ \t]*\n[ \t]*([\p{Ll}]+)/gu, (_match,left,right)=>left.length>=6 && right.length<=3 ? `${left} ${right}` : `${left}${right}`)
     .replace(/\s+(?=(?:langues?|languages?|centres? d['’ ]int[eé]r[eê]t|certifications?(?:\s+et\s+formations?)?|formations?\s+et\s+certifications?)\s*:)/gi,"\n")
     .replace(/\s+(?=\d{1,2}[\/.-]\d{4}\s*(?:[-–—]|à|a)\s*\d{1,2}[\/.-]?\d{0,4})/g,"\n"));
-  const lines=prepared.split(/\r?\n/).map((line)=>normalizeDateRange(line.trim())).filter(usefulCvLine);
+  const lines=prepared.split(/\r?\n/).map((line)=>repairText(normalizeDateRange(line.trim()))).filter(usefulCvLine);
   // Les trois premières lignes correspondent généralement au nom, au titre
   // et aux coordonnées. Le texte qui suit avant la première expérience est
   // conservé comme résumé, même si le CV ne possède pas de titre « Profil ».
-  let headerCount=Math.min(3,lines.length);
+  const firstDateIndex=lines.findIndex(isDateLine);
+  // Si l'extraction PDF commence par une expérience (cas fréquent avec deux
+  // colonnes), ne transforme jamais cette date en nom ou coordonnées.
+  let headerCount=firstDateIndex===0 ? 0 : Math.min(3, firstDateIndex>0 ? firstDateIndex : lines.length);
   // Un résumé peut apparaître juste après le nom et le titre, avant les
   // coordonnées. Il ne doit jamais être absorbé dans l'en-tête.
   while(headerCount>1 && /^(profil|r[eé]sum[eé]|summary|objectif)\s*:/i.test(lines[headerCount-1])) headerCount--;
@@ -95,7 +113,10 @@ export function buildLocalAdaptation(cv:string,target:string,matchedSkills:strin
   const interestItems = sections.get("CENTRES D'INTÉRÊT") ?? [];
   const output=[...header,"",...(target?["TITRE CIBLE",target,""]:[])];
   output.push("PROFIL", ...(profileItems.length ? profileItems : ["Résumé professionnel à vérifier dans le CV source."]), "");
-  const skills=[...new Set([...skillItems,...matchedSkills])];
+  // Les termes de l'offre ne sont pas des compétences du candidat. Seules les
+  // compétences explicitement présentes dans le CV ou confirmées par le
+  // parseur de l'offre peuvent apparaître ici.
+  const skills=[...new Set([...skillItems,...matchedSkills])].map(repairText).filter(Boolean);
   output.push("COMPÉTENCES", ...(skills.length ? skills : ["Compétences présentes dans le CV à vérifier"]), "");
   // Sépare chaque expérience dès qu'une nouvelle plage de dates apparaît.
   // Cette règle rétablit les retours à la ligne perdus par certains PDF.
