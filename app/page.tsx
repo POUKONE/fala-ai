@@ -27,6 +27,8 @@ type AccountSession = {createdAt:string;lastSeenAt:string;expiresAt:string;devic
 const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
 const TAB_SESSION_KEY = "fala_tab_session";
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
+const sectorSuggestions = ["Tech","Data & IA","Finance","Banque","Assurance","Juridique","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom","Ressources humaines","Hôtellerie","Restauration","Communication","Marketing","Logistique","Aéronautique","Automobile","Construction","Public"];
+const locationSuggestions = ["Paris","Lyon","Marseille","Toulouse","Bordeaux","Lille","Nantes","Montpellier","Strasbourg","Nice","Rennes","Grenoble","France","Île-de-France","Télétravail","Hybride"];
 const scoreMaximums:Record<string,number> = {skills:35,title:15,experience:15,location:10,education:10,contract:5,languages:5,salary:5};
 const scoreNames:Record<string,string> = {skills:"Compétences",title:"Intitulé du poste",experience:"Expérience",education:"Études",location:"Localisation",contract:"Contrat",languages:"Langues",sector:"Secteur",salary:"Salaire"};
 
@@ -481,6 +483,12 @@ export default function Home() {
     return()=>{ window.removeEventListener("pageshow", revalidateOnRestore); window.removeEventListener("popstate", revalidateOnRestore); };
   },[loadData]);
   useEffect(()=>{ if (!currentUser) return; const timer=window.setTimeout(()=>void syncNotifications(true),0); const interval=window.setInterval(()=>void syncNotifications(true),60000); return()=>{window.clearTimeout(timer);window.clearInterval(interval);}; },[currentUser]);
+  useEffect(()=>{
+    const attachSuggestions = (field:string,listId:string) => document.querySelectorAll<HTMLInputElement>(`input[name="${field}"]`).forEach((input)=>input.setAttribute("list",listId));
+    attachSuggestions("location","fala-location-suggestions");
+    attachSuggestions("sector","fala-sector-suggestions");
+    attachSuggestions("sectors","fala-sector-suggestions");
+  },[modal]);
   useEffect(()=>{ if (modal !== "privacy" || !currentUser) return; setSessionsLoading(true); void csrfFetch("/api/account/sessions",{cache:"no-store"}).then(async(response)=>{const body=await response.json().catch(()=>({}));if(response.ok)setSessions(body.sessions??[]);}).finally(()=>setSessionsLoading(false)); },[modal,currentUser]);
 
   async function syncNotifications(showBrowserAlerts = false) {
@@ -623,6 +631,8 @@ export default function Home() {
   if(consentRequired)return <main className="consent-shell"><section className="consent-card"><span className="brand-mark">F</span><p className="eyebrow">PROTECTION DE VOS DONNÉES</p><h1>Bienvenue dans votre espace Fala AI</h1><p>Pour activer votre espace personnel, confirmez que vous avez lu la politique de confidentialité et les conditions d’utilisation. Vos candidatures restent privées et vous pourrez exporter ou supprimer vos données à tout moment.</p><label className="consent-check"><input type="checkbox" checked={consentAccepted} onChange={(event)=>setConsentAccepted(event.target.checked)}/>J’accepte le traitement de mes données pour fournir le service Fala AI.</label><div><a href="/privacy" target="_blank">Politique de confidentialité</a><a href="/terms" target="_blank">Conditions d’utilisation</a></div><button className="primary" disabled={!consentAccepted||saving} onClick={()=>void acceptConsent()}>{saving?"Activation…":"Activer mon espace"}</button><a href="/api/auth/logout">Refuser et se déconnecter</a></section></main>;
 
   return <main className="app-shell">
+    <datalist id="fala-location-suggestions">{locationSuggestions.map((location)=><option key={location} value={location}/>)}</datalist>
+    <datalist id="fala-sector-suggestions">{sectorSuggestions.map((sector)=><option key={sector} value={sector}/>)}</datalist>
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div>
