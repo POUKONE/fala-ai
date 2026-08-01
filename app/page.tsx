@@ -116,13 +116,21 @@ function sanitizeExtractedCvText(value:string) {
   return value
     .replace(/\u00a0/g, " ")
     .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/â(?:\u0080|€)?(?:\u0098|\u0099)/g, "'")
+    .replace(/â(?:\u0080|€)?(?:\u0093|\u0094|\u0096|\u0097)/g, "-")
     .replace(/â€™|â€˜/g, "'").replace(/â€œ|â€/g, '"').replace(/â€“|â€”|â€\u0093|â€\u0094/g, "-")
     .replace(/dâ\s*experience/gi, "d'expérience")
+    .replace(/(^|[\s([|])â(?=$|[\s)\].,;:!?])/g, "$1")
+    .replace(/â(?=\s*(?:experience|expérience|ce|cette|les|le|la|un|une)\b)/gi, "'")
     // Certains PDF exportés depuis Word encodent les puces et séparateurs
     // comme des glyphes isolés (par ex. “, ‰). Les convertir ici évite qu'ils
     // se retrouvent au milieu des intitulés ou des coordonnées.
     .replace(/[“”]/g, "\n")
     .replace(/[‰]/g, " | ")
+    // Les exports PDF utilisent souvent un glyphe de puce qui n'est pas
+    // décodé par PDF.js. Il représente une nouvelle réalisation, pas un
+    // espace : le convertir en saut de ligne évite de fusionner les postes.
+    .replace(/[▪◼●➢✈•]/g, "\n")
     .replace(/\b([dls])\s{2,}(?=[a-zà-ÿ])/gi, "$1'")
     .replace(/\bC\s+ameroun\b/gi, "Cameroun")
     .replace(/\balt\s+ernant\b/gi, "alternant")
@@ -134,7 +142,7 @@ function sanitizeExtractedCvText(value:string) {
     // Recompose uniquement les mots coupés par un retour de ligne PDF ; les
     // vrais mots composés avec un espace autour du tiret restent inchangés.
     .replace(/([\p{L}]+)-[ \t]*\n[ \t]*([\p{Ll}]+)/gu, (_match,left,right)=>left.length>=6 && right.length<=3 ? `${left} ${right}` : `${left}${right}`)
-    .replace(/[\u{1F300}-\u{1FAFF}▪◼●➢✈]/gu, "")
+    .replace(/[\u{1F300}-\u{1FAFF}]/gu, "")
     .split(/\r?\n/)
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
     .filter((line) => line && !/^à$/.test(line) && !/^(?:[•▪◼●➢✈]|â€)[\s-]*$/.test(line))
@@ -177,30 +185,30 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
     const pages:string[]=[];
     for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
       const page=await document.getPage(pageNumber); const content=await page.getTextContent();
-      const items=(content.items as Array<{str?:string;transform?:number[]}>).filter((item)=>String(item.str??"").trim());
-      const positioned=items.map((item)=>({x:Number(item.transform?.[4]??0),y:Math.round(Number(item.transform?.[5]??0)/2)*2,text:String(item.str??"").trim()}));
-      // Group distant horizontal starts into columns. Joining every item by Y
-      // makes a two-column CV read as alternating experience/skills fragments.
-      const starts=[...new Set(positioned.map((item)=>item.x).sort((a,b)=>a-b))];
-      let anchors=[starts[0]];
-      if(starts.length>2 && starts[starts.length-1]-starts[0]>180){
-        let left=starts[0],right=starts[starts.length-1];
-        for(let iteration=0;iteration<4;iteration++){
-          const leftItems=positioned.filter((item)=>Math.abs(item.x-left)<=Math.abs(item.x-right));
-          const rightItems=positioned.filter((item)=>Math.abs(item.x-left)>Math.abs(item.x-right));
-          left=leftItems.reduce((sum,item)=>sum+item.x,0)/Math.max(1,leftItems.length);
-          right=rightItems.reduce((sum,item)=>sum+item.x,0)/Math.max(1,rightItems.length);
-        }
-        anchors=[Math.min(left,right),Math.max(left,right)];
+      const items=(content.items as Array<{str?:string;transform?:number[];width?:number}>).filter((item)=>String(item.str??"").trim());
+      const positioned=items.map((item)=>({x:Number(item.transform?.[4]??0),y:Number(item.transform?.[5]??0),width:Number(item.width??0),text:String(item.str??"").trim()}));
+      // Détecter le séparateur réel par le plus grand espace entre deux
+      // positions X. Le regroupement itératif par ancres mélangeait les
+      // fragments lorsque chaque colonne avait des marges différentes.
+      const starts=[...new Set(positioned.map((item)=>Math.round(item.x)).sort((a,b)=>a-b))];
+      let splitX:number|null=null;
+      let largestGap=0;
+      for(let index=1;index<starts.length;index++){
+        const gap=starts[index]-starts[index-1];
+        if(gap>largestGap){largestGap=gap;splitX=(starts[index]+starts[index-1])/2;}
       }
-      const columns=anchors.map((anchor,index)=>positioned.filter((item)=>{
-        const distances=anchors.map((candidate)=>Math.abs(item.x-candidate));
-        return distances.indexOf(Math.min(...distances))===index;
-      }));
+      const twoColumns=splitX!==null && largestGap>=90 && (starts[starts.length-1]-starts[0])>=260;
+      const columns=twoColumns
+        ? [positioned.filter((item)=>item.x<splitX!),positioned.filter((item)=>item.x>=splitX!)]
+        : [positioned];
       const columnText=columns.map((column)=>{
-        const lines=new Map<number,Array<{x:number;text:string}>>();
-        for(const item of column){const current=lines.get(item.y)??[];current.push(item);lines.set(item.y,current);}
-        return [...lines.entries()].sort((a,b)=>b[0]-a[0]).map(([,line])=>line.sort((a,b)=>a.x-b.x).map((item)=>item.text).join(" ")).join("\n");
+        const lines:Array<{y:number;items:Array<{x:number;text:string}>}>=[];
+        for(const item of column.sort((a,b)=>b.y-a.y||a.x-b.x)){
+          const current=lines.find((line)=>Math.abs(line.y-item.y)<=4);
+          if(current) current.items.push(item);
+          else lines.push({y:item.y,items:[item]});
+        }
+        return lines.sort((a,b)=>b.y-a.y).map((line)=>line.items.sort((a,b)=>a.x-b.x).map((item)=>item.text).join(" ")).join("\n");
       }).filter(Boolean);
       pages.push(columnText.join("\n\n"));
       onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));

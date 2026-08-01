@@ -8,8 +8,14 @@ const SKILL_DICTIONARY = [
   {name:"KPI",aliases:["KPIs"]}, {name:"Reporting"}, {name:"CRM"}, {name:"MRR"}, {name:"NRR"}, {name:"GRR"}, {name:"LTV"},
   {name:"Churn"}, {name:"CPQ"}, {name:"Business Intelligence",aliases:["BI"]}, {name:"Data Quality"},
   {name:"Financial Analysis"}, {name:"Process Improvement"},
+  {name:"Gestion de projet"}, {name:"Gestion administrative"}, {name:"Relation client"}, {name:"Service client"},
+  {name:"Vente"}, {name:"Négociation"}, {name:"Marketing"}, {name:"Communication"}, {name:"Ressources humaines",aliases:["RH"]},
+  {name:"Droit"}, {name:"Conformité"}, {name:"Audit"}, {name:"Comptabilité"}, {name:"Contrôle de gestion"},
+  {name:"Logistique"}, {name:"Achats"}, {name:"Supply Chain"}, {name:"Qualité"}, {name:"Sécurité"},
+  {name:"Maintenance"}, {name:"Production"}, {name:"Conception"}, {name:"Formation"}, {name:"Pédagogie"},
+  {name:"Recherche"}, {name:"Anglais"}, {name:"Français"}, {name:"Espagnol"}, {name:"Allemand"},
 ];
-const SECTORS = ["Tech","Finance","Banque","Assurance","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom"];
+const SECTORS = ["Tech","Finance","Banque","Assurance","Juridique","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom","Ressources humaines","Hôtellerie","Restauration","Communication","Marketing","Logistique","Aéronautique","Automobile","Construction","Public"];
 
 function matchFirst(text:string,patterns:RegExp[]){for(const pattern of patterns){const match=text.match(pattern);if(match?.[1])return match[1].trim();}return "";}
 function normalizeText(value:string){return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
