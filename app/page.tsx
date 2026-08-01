@@ -98,6 +98,10 @@ function createPdfBlob(text:string) {
   return new Blob([pdf],{type:"application/pdf"});
 }
 function downloadPdf(text:string) { previewPdf(text); }
+function downloadApplicationsPdf(rows:Application[]) {
+  const text=["FALA AI - MES CANDIDATURES","", "Entreprise | Poste | Statut | Score | Localisation", ...rows.map((row)=>`${row.company} | ${row.role} | ${row.status} | ${row.score??"-"}/100 | ${row.location||""}${row.next_action_at?` | Prochaine action : ${row.next_action_at}`:""}`)].join("\n");
+  const url=URL.createObjectURL(createPdfBlob(text)); const link=document.createElement("a"); link.href=url; link.download="fala-ai-candidatures.pdf"; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
 function previewPdf(text:string) {
   const url=URL.createObjectURL(createPdfBlob(text));
   const overlay=document.createElement("div");
@@ -477,7 +481,7 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
-  useEffect(()=>{ const link=document.querySelector<HTMLAnchorElement>('a[href="/api/account/export"]'); if(link){ link.textContent="Exporter mes candidatures (CSV Excel)"; if(!document.querySelector('a[data-export-pdf]')){ const pdfLink=document.createElement("a"); pdfLink.href="/api/account/export?format=pdf"; pdfLink.download="fala-ai-candidatures.pdf"; pdfLink.dataset.exportPdf="true"; pdfLink.textContent="Télécharger mes candidatures (PDF)"; link.after(pdfLink); } } },[modal]);
+  useEffect(()=>{ const link=document.querySelector<HTMLAnchorElement>('a[href="/api/account/export"]'); if(link){ link.textContent="Exporter mes candidatures (CSV Excel)"; let pdfLink=document.querySelector<HTMLAnchorElement>('a[data-export-pdf]'); if(!pdfLink){ pdfLink=document.createElement("a"); pdfLink.href="#"; pdfLink.download="fala-ai-candidatures.pdf"; pdfLink.dataset.exportPdf="true"; pdfLink.textContent="Télécharger mes candidatures (PDF)"; link.after(pdfLink); } pdfLink.onclick=(event)=>{ event.preventDefault(); downloadApplicationsPdf(applications); }; } },[modal,applications]);
   useEffect(()=>{
     const revalidateOnRestore = (event: PageTransitionEvent) => { if (event.persisted) void loadData(); };
     window.addEventListener("pageshow", revalidateOnRestore);
