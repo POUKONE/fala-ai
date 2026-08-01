@@ -386,7 +386,7 @@ export default function Home() {
         window.location.replace("/auth?reauth=1");
         return;
       }
-      setCurrentUser(meData.user ?? null); setIsAdmin(Boolean(meData.isAdmin)); setConsentRequired(Boolean(meData.consentRequired)); setSuspension(meData.suspended?String(meData.suspensionReason||"Compte suspendu"):null); setAuthChecked(true);
+      setCurrentUser(meData.user ?? null); setIsAdmin(Boolean(meData.isAdmin)); setConsentRequired(Boolean(meData.consentRequired)); setSuspension(meData.suspended?String(meData.suspensionReason||"Compte suspendu"):null); setAuthChecked(true); setLoading(false);
       if (!meData.user) { window.sessionStorage.removeItem(TAB_SESSION_KEY); setApplications([]); setProfile(null); setActivity([]); return; }
       if (meData.suspended || meData.consentRequired) { setApplications([]); setProfile(null); setActivity([]); return; }
       const [appsResponse,profileResponse,activityResponse] = await Promise.all([csrfFetch("/api/applications",{cache:"no-store"}),csrfFetch("/api/profile",{cache:"no-store"}),csrfFetch("/api/activity",{cache:"no-store"})]);
@@ -520,7 +520,7 @@ export default function Home() {
     setApplications((current)=>current.filter((a)=>a.id!==selected.id)); setSelected(null); notify("Candidature supprimée");
   }
 
-  if (!authChecked || loading) return <main className="public-shell"><div className="public-loader"><span className="brand-mark">F</span><p>Ouverture de Fala AI…</p></div></main>;
+  if (!authChecked) return <main className="public-shell"><div className="public-loader"><span className="brand-mark">F</span><p>Ouverture de Fala AI…</p></div></main>;
 
   if (!currentUser) return <main className="public-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>

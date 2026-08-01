@@ -9,6 +9,7 @@ import {
 } from "../../../../db/security";
 import { createSession, invalidateSessions, verifyPassword, SESSION_COOKIE } from "../../../email-auth";
 import { supabasePasswordGrant } from "../../../supabase-auth";
+import { authPreflight, finalizeAuth } from "../../../../db/auth-rpc";
 
 export const dynamic = "force-dynamic";
 
@@ -43,16 +44,20 @@ export async function POST(request: Request) {
   const ip = getClientIp(request);
   if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8 || password.length > 256) return invalidCredentials();
 
-  const emailAllowed = await enforceRateLimit(email, "auth-login", 10, 900);
-  const ipAllowed = ip === "unknown" ? true : await enforceRateLimit(`ip:${ip}`, "auth-login", 30, 900);
-  if (!emailAllowed || !ipAllowed) return limited(Response.json({ error: "Trop de tentatives. Réessayez dans quelques minutes." }, { status: 429 }));
-
-  const [emailLock, ipLock] = await Promise.all([getLoginLock(email), ip === "unknown" ? null : getLoginLock(`ip:${ip}`)]);
-  if (emailLock?.locked_until || ipLock?.locked_until) {
-    return limited(Response.json({ error: "Trop de tentatives échouées. Réessayez dans 15 minutes." }, { status: 429 }));
+  const fastPreflight = await authPreflight(email, ip);
+  let failures = 0;
+  if (fastPreflight) {
+    if (fastPreflight.allowed !== true) return limited(Response.json({ error: "Trop de tentatives. Réessayez dans quelques minutes." }, { status: 429 }));
+    if (fastPreflight.emailLocked === true || fastPreflight.ipLocked === true) return limited(Response.json({ error: "Trop de tentatives échouées. Réessayez dans 15 minutes." }, { status: 429 }));
+    failures = Number(fastPreflight.failedCount ?? 0);
+  } else {
+    const emailAllowed = await enforceRateLimit(email, "auth-login", 10, 900);
+    const ipAllowed = ip === "unknown" ? true : await enforceRateLimit(`ip:${ip}`, "auth-login", 30, 900);
+    if (!emailAllowed || !ipAllowed) return limited(Response.json({ error: "Trop de tentatives. Réessayez dans quelques minutes." }, { status: 429 }));
+    const [emailLock, ipLock] = await Promise.all([getLoginLock(email), ip === "unknown" ? null : getLoginLock(`ip:${ip}`)]);
+    if (emailLock?.locked_until || ipLock?.locked_until) return limited(Response.json({ error: "Trop de tentatives échouées. Réessayez dans 15 minutes." }, { status: 429 }));
+    failures = Math.max(emailLock?.failed_count ?? 0, ipLock?.failed_count ?? 0);
   }
-
-  const failures = Math.max(emailLock?.failed_count ?? 0, ipLock?.failed_count ?? 0);
   if (failures >= 3) {
     const captcha = await verifyTurnstile(body?.captchaToken, ip);
     if (captcha.configured && !captcha.success) {
@@ -61,17 +66,14 @@ export async function POST(request: Request) {
   }
 
   const db = getPostgresDb();
-  // The local account lookup and Supabase authentication are independent;
-  // run them together so login latency is bounded by the slower dependency,
-  // not the sum of both round trips.
-  let [user, remote] = await Promise.all([
-    db.prepare("SELECT email,display_name,password_hash,suspended_at FROM users WHERE lower(email)=lower(?)")
-      .bind(email).first<LoginUser>(),
-    supabasePasswordGrant(email, password),
-  ]);
+  // Supabase Auth is the source of truth for current accounts. The local
+  // lookup is retained only as a compatibility fallback for legacy hashes.
+  const remote = await supabasePasswordGrant(email, password);
+  let user: LoginUser | null = null;
   let authenticated = Boolean(remote?.user);
-  if (!authenticated && user?.password_hash && user.password_hash !== "supabase") {
-    authenticated = await verifyPassword(password, user.password_hash);
+  if (!authenticated) {
+    user = await db.prepare("SELECT email,display_name,password_hash,suspended_at FROM users WHERE lower(email)=lower(?)").bind(email).first<LoginUser>();
+    if (user?.password_hash && user.password_hash !== "supabase") authenticated = await verifyPassword(password, user.password_hash);
   }
   if (!authenticated) {
     await registerFailure(email, ip);
@@ -79,15 +81,34 @@ export async function POST(request: Request) {
   }
 
   if (user?.suspended_at) return Response.json({ error: "Compte suspendu" }, { status: 403 });
+  const sessionEmail = user?.email ?? email;
+  const displayName = user?.display_name ?? String(remote?.user?.user_metadata?.display_name || email.split("@")[0]);
+  if (remote?.user && fastPreflight) {
+    const now = new Date();
+    const sessionToken = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+    const expires = new Date(now.getTime() + 2592000000);
+    const finalized = await finalizeAuth(sessionEmail, ip, displayName, sessionToken, now.toISOString(), expires.toISOString());
+    if (finalized?.suspended === true) return Response.json({ error: "Compte suspendu" }, { status: 403 });
+    if (finalized?.ok === true) {
+      const response = Response.json({ ok: true, user: { email: sessionEmail, displayName } });
+      response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
+      response.headers.set("Cache-Control", "no-store");
+      return response;
+    }
+  }
+  // If the fast RPC is not installed yet, retain the local account check
+  // before the compatibility upsert so suspended legacy accounts cannot
+  // bypass the suspension guard during the transition.
+  if (remote?.user && !user) {
+    user = await db.prepare("SELECT email,display_name,password_hash,suspended_at FROM users WHERE lower(email)=lower(?)").bind(email).first<LoginUser>();
+    if (user?.suspended_at) return Response.json({ error: "Compte suspendu" }, { status: 403 });
+  }
   if (remote?.user && !user) {
     const now = new Date().toISOString();
-    const displayName = String(remote.user.user_metadata?.display_name || email.split("@")[0]);
     await db.prepare("INSERT INTO users (email,display_name,created_at,last_seen_at,password_hash,consent_version,consented_at) VALUES (?,?,?,?,?,?,?)")
       .bind(email, displayName, now, now, "supabase", "v1", now).run();
     user = { email, display_name: displayName, password_hash: "supabase", suspended_at: null };
   }
-
-  const sessionEmail = user?.email ?? email;
   // Rotate the account's sessions after a successful authentication so tokens
   // from a previous login cannot remain valid indefinitely.
   await db.prepare("UPDATE users SET last_seen_at=? WHERE lower(email)=lower(?)").bind(new Date().toISOString(), sessionEmail).run();
