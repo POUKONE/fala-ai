@@ -61,10 +61,14 @@ export async function POST(request: Request) {
   }
 
   const db = getPostgresDb();
-  let user = await db.prepare("SELECT email,display_name,password_hash,suspended_at FROM users WHERE lower(email)=lower(?)")
-    .bind(email).first<LoginUser>();
-
-  const remote = await supabasePasswordGrant(email, password);
+  // The local account lookup and Supabase authentication are independent;
+  // run them together so login latency is bounded by the slower dependency,
+  // not the sum of both round trips.
+  let [user, remote] = await Promise.all([
+    db.prepare("SELECT email,display_name,password_hash,suspended_at FROM users WHERE lower(email)=lower(?)")
+      .bind(email).first<LoginUser>(),
+    supabasePasswordGrant(email, password),
+  ]);
   let authenticated = Boolean(remote?.user);
   if (!authenticated && user?.password_hash && user.password_hash !== "supabase") {
     authenticated = await verifyPassword(password, user.password_hash);

@@ -75,6 +75,7 @@ function AuthPageContent() {
       else if (mode === "register" && signupStep === "email") { setSignupStep("code"); setPassword(""); setMessage(data.message || "Un code de vérification vient d’être envoyé."); }
       else if (mode === "register" && signupStep === "code") { setSignupStep("password"); setPassword(""); setMessage(data.message || "Adresse vérifiée. Choisissez maintenant votre mot de passe."); }
       else if (mode === "register" && data.requiresEmailConfirmation) { setMode("login"); setMessage(data.message || "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter."); }
+      else if (mode === "register") { setMode("login"); setSignupStep("email"); setPassword(""); setMessage(data.message || "Votre compte est créé avec succès. Vous pouvez maintenant vous connecter."); }
       else { setCaptchaRequired(false); setCaptchaToken(""); router.push("/"); router.refresh(); }
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Une erreur est survenue."); }
     finally { setBusy(false); }
