@@ -5,6 +5,26 @@ import { recordActivity } from "../../../../db/user-activity";
 
 export const dynamic = "force-dynamic";
 
+const csvCell = (value: unknown) => {
+  const text = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+  return `"${text.replaceAll('"', '""')}"`;
+};
+const recordValue = (record: unknown, key: string) => record && typeof record === "object" ? (record as Record<string, unknown>)[key] : "";
+function toCsv(account: unknown, profile: unknown, applications: unknown[], activity: unknown[], reports: unknown[]) {
+  const columns = ["section", "id", "email", "nom", "entreprise", "poste", "localisation", "statut", "score", "source", "competences_demandees", "experience_requise", "formation_requise", "langues", "secteur", "salaire_min", "date_candidature", "prochaine_action", "entretien", "type_evenement", "description", "categorie", "message", "statut_signalement", "note_admin", "date_creation", "date_mise_a_jour", "donnees_completes"];
+  const rows: string[][] = [];
+  const add = (section: string, record: unknown, values: Record<string, unknown> = {}) => {
+    const get = (key: string) => values[key] ?? recordValue(record, key);
+    rows.push([section, get("id"), get("email"), get("display_name") ?? get("nom"), get("company"), get("role"), get("location"), get("status"), get("score"), get("source"), get("required_skills"), get("experience_required"), get("education_required"), get("languages"), get("sector"), get("salary_min"), get("applied_at"), get("next_action_at"), get("interview_at"), get("event_type"), get("description"), get("category"), get("message"), get("report_status"), get("admin_note"), get("created_at"), get("updated_at"), record].map(csvCell));
+  };
+  add("compte", account);
+  if (profile) add("profil", profile, { email: recordValue(profile, "user_email") });
+  applications.forEach((record) => add("candidature", record, { email: recordValue(record, "user_email") }));
+  activity.forEach((record) => add("activite", record, { email: recordValue(record, "user_email") }));
+  reports.forEach((record) => add("signalement", record, { email: recordValue(record, "user_email"), report_status: recordValue(record, "status") }));
+  return `\uFEFF${[columns, ...rows].map((row) => row.join(",")).join("\r\n")}\r\n`;
+}
+
 export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return Response.json({error:"Authentification requise"},{status:401});
@@ -18,6 +38,6 @@ export async function GET() {
     db.prepare("SELECT category,message,status,admin_note,created_at,updated_at FROM reports WHERE user_email=? ORDER BY id").bind(user.email).all(),
   ]);
   await recordActivity(user,"privacy.export","Export des données personnelles généré");
-  const payload = JSON.stringify({exportedAt:new Date().toISOString(),account,profile:profile??null,applications:applications.results,activity:activity.results,reports:reports.results},null,2);
-  return new Response(payload,{headers:{"content-type":"application/json; charset=utf-8","content-disposition":`attachment; filename="fala-ai-export-${new Date().toISOString().slice(0,10)}.json"`,"cache-control":"no-store"}});
+  const content = toCsv(account, profile, applications.results, activity.results, reports.results);
+  return new Response(content,{headers:{"content-type":"text/csv; charset=utf-8","content-disposition":`attachment; filename="fala-ai-export-${new Date().toISOString().slice(0,10)}.csv"`,"cache-control":"no-store"}});
 }

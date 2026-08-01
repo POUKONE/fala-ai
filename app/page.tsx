@@ -477,6 +477,7 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
+  useEffect(()=>{ const link=document.querySelector<HTMLAnchorElement>('a[href="/api/account/export"]'); if(link) link.textContent="Exporter mes données (CSV Excel)"; },[modal]);
   useEffect(()=>{
     const revalidateOnRestore = (event: PageTransitionEvent) => { if (event.persisted) void loadData(); };
     window.addEventListener("pageshow", revalidateOnRestore);
