@@ -27,31 +27,21 @@ export async function enforceRateLimit(identity: string, action: string, limit =
   const key = `${identity.toLowerCase()}:${action}`;
   let current: {window_start:string;count:number} | null;
   try {
-    // Read and update the window in one Postgres round-trip. This endpoint is
-    // on the login hot path, so a SELECT followed by an INSERT/UPDATE made a
-    // normal sign-in wait on several sequential HTTP requests.
-    current = await db.prepare(`
-      WITH upsert AS (
-        INSERT INTO rate_limits (key,window_start,count)
-        VALUES (?,CURRENT_TIMESTAMP,1)
-        ON CONFLICT(key) DO UPDATE SET
-          window_start = CASE WHEN rate_limits.window_start < (CURRENT_TIMESTAMP - INTERVAL '${windowSeconds} seconds') THEN CURRENT_TIMESTAMP ELSE rate_limits.window_start END,
-          count = CASE WHEN rate_limits.window_start < (CURRENT_TIMESTAMP - INTERVAL '${windowSeconds} seconds') THEN 1 ELSE rate_limits.count + 1 END
-        RETURNING window_start,count
-      ) SELECT window_start,count FROM upsert
-    `).bind(key).first<{window_start:string;count:number}>();
+    current = await db.prepare("SELECT window_start,count FROM rate_limits WHERE key=?").bind(key).first<{window_start:string;count:number}>();
   } catch (error) {
     if (!String(error).includes("no such table: rate_limits")) throw error;
     await db.prepare("CREATE TABLE IF NOT EXISTS rate_limits (key TEXT PRIMARY KEY NOT NULL, window_start TEXT NOT NULL, count INTEGER DEFAULT 0 NOT NULL)").run();
-    current = await db.prepare(`
-      WITH upsert AS (
-        INSERT INTO rate_limits (key,window_start,count) VALUES (?,CURRENT_TIMESTAMP,1)
-        ON CONFLICT(key) DO UPDATE SET window_start=CURRENT_TIMESTAMP,count=1
-        RETURNING window_start,count
-      ) SELECT window_start,count FROM upsert
-    `).bind(key).first<{window_start:string;count:number}>();
+    current = await db.prepare("SELECT window_start,count FROM rate_limits WHERE key=?").bind(key).first<{window_start:string;count:number}>();
   }
-  return Boolean(current && current.count <= limit);
+  const now = new Date();
+  if (!current || now.getTime() - new Date(current.window_start).getTime() >= windowSeconds * 1000) {
+    await db.prepare("INSERT INTO rate_limits (key,window_start,count) VALUES (?,?,1) ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start,count=1")
+      .bind(key,now.toISOString()).run();
+    return true;
+  }
+  if (current.count >= limit) return false;
+  await db.prepare("UPDATE rate_limits SET count=count+1 WHERE key=?").bind(key).run();
+  return true;
 }
 
 export function getClientIp(request: Request) {

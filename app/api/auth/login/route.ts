@@ -7,7 +7,7 @@ import {
   recordLoginFailure,
   verifyTurnstile,
 } from "../../../../db/security";
-import { rotateSession, verifyPassword, SESSION_COOKIE } from "../../../email-auth";
+import { createSession, invalidateSessions, verifyPassword, SESSION_COOKIE } from "../../../email-auth";
 import { supabasePasswordGrant } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
@@ -90,8 +90,10 @@ export async function POST(request: Request) {
   const sessionEmail = user?.email ?? email;
   // Rotate the account's sessions after a successful authentication so tokens
   // from a previous login cannot remain valid indefinitely.
+  await db.prepare("UPDATE users SET last_seen_at=? WHERE lower(email)=lower(?)").bind(new Date().toISOString(), sessionEmail).run();
+  try { await invalidateSessions(sessionEmail); } catch { /* the new session may still be created if cleanup is unavailable */ }
   await clearLoginFailures(ip === "unknown" ? [email] : [email, `ip:${ip}`]);
-  const session = await rotateSession(sessionEmail);
+  const session = await createSession(sessionEmail);
   const response = Response.json({ ok: true, user: { email: sessionEmail, displayName: user?.display_name ?? email.split("@")[0] } });
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
   response.headers.set("Cache-Control", "no-store");
