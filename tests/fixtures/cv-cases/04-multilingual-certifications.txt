@@ -1,0 +1,12 @@
+Samira Benali
+Product Analyst | Bruxelles | samira@example.test
+
+SUMMARY
+Product Analyst spécialisée dans l'analyse d'usage et la coordination produit.
+
+SKILLS: Amplitude, SQL, A/B testing, Jira
+LANGUAGES: Français bilingue, anglais courant, néerlandais intermédiaire
+CERTIFICATIONS ET FORMATIONS: Product Analytics — Formation Exemple — 2024
+EXPÉRIENCE PROFESSIONNELLE
+2021 - 2024 — Product Analyst, Exemple App, Bruxelles
+- Analyse des parcours utilisateurs et partage des résultats avec l'équipe produit.

@@ -1,0 +1,18 @@
+Camille Durand
+Data Analyst | Paris | camille@example.test | +33 6 00 00 00 00
+
+PROFIL
+Data Analyst avec trois ans d'expérience en reporting et analyse de données.
+
+EXPÉRIENCE
+2022 - Présent — Analyste données, Exemple Conseil, Paris
+- Création de tableaux de bord pour les équipes métier.
+
+COMPÉTENCES
+SQL, Python, Power BI, Excel
+
+FORMATION
+Master Data — Université Exemple — 2020-2022
+
+LANGUES
+Français courant, anglais professionnel

@@ -1,0 +1,7 @@
+Alex Martin | Business Analyst | Lyon | alex@example.test
+Doté de quatre ans d'expérience en analyse financière et amélioration des processus.
+06/2022 - 08/2024 Analyste financier — Exemple Finance, Lyon
+Analyse des écarts budgétaires et suivi des indicateurs.
+COMPÉTENCES : SQL, Power BI, Excel avancé
+Langues : Français : courant, Anglais : professionnel
+Certifications et Formations : Certification Excel — Organisme Exemple — 2023

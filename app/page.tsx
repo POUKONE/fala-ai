@@ -62,6 +62,11 @@ function interviewQuestions(application:Application):InterviewQuestion[] {
 }
 
 function escapePdf(value:string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("œ","oe").replaceAll("Œ","OE").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)"); }
+function wrapPdfLine(value:string,maxLength=92) {
+  const words=value.trim().split(/\s+/).filter(Boolean); const lines:string[]=[]; let current="";
+  for(const word of words){ if(!current){current=word;continue;} if((current+" "+word).length<=maxLength) current+=` ${word}`; else {lines.push(current);current=word;} }
+  if(current) lines.push(current); return lines.length?lines:[""];
+}
 function downloadBlob(blob:Blob, filename:string) { const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000); }
 function createPdfBlob(text:string) {
   const lines=text.split(/\r?\n/).map((line)=>line.trim()).filter(Boolean);
@@ -78,7 +83,7 @@ function createPdfBlob(text:string) {
   add(50,27,header[0]??"CV",true,ink); if(header[1]) add(50,14,header[1],true,ink); if(header.slice(2).length){y-=4; add(50,9,header.slice(2).join("   "),false,ink);} y-=10;
   for(const section of sections){ if(y<80)break; commands.push(`${navy} rg 0.6 w 50 ${y+8} m 562 ${y+8} l S`); y-=18; add(50,13,section.title.toUpperCase(),true,navy); y-=2;
     if(/COMPETENCES|COMPÉTENCES/i.test(section.title)){ const skills=section.items.flatMap((item)=>item.split(/\s*[·•,;]\s*/).filter(Boolean)); const colWidth=170; const startY=y; skills.slice(0,18).forEach((skill,index)=>{const col=index%3; const row=Math.floor(index/3); const yy=startY-row*16; commands.push(`${ink} rg BT /F1 9 Tf ${50+col*colWidth} ${yy} Td (${escapePdf(skill.slice(0,28))}) Tj ET`);}); y=startY-Math.ceil(Math.min(skills.length,18)/3)*16-8; }
-    else { for(const item of section.items.slice(0,14)){ const wrapped=item.match(/.{1,92}/g)??[item]; for(const part of wrapped) add(50,9,part); y-=2; } }
+    else { for(const item of section.items.slice(0,14)){ for(const part of wrapPdfLine(item)) add(50,9,part); y-=2; } }
   }
   const commandsText=commands.join("\n");
   const objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>",`<< /Length ${commandsText.length} >>\nstream\n${commandsText}\nendstream`];
@@ -113,6 +118,9 @@ function sanitizeExtractedCvText(value:string) {
     .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
     .replace(/â€™|â€˜/g, "'").replace(/â€œ|â€/g, '"').replace(/â€“|â€”|â€\u0093|â€\u0094/g, "-")
     .replace(/dâ\s*experience/gi, "d'expérience")
+    // Recompose uniquement les mots coupés par un retour de ligne PDF ; les
+    // vrais mots composés avec un espace autour du tiret restent inchangés.
+    .replace(/([\p{L}]+)-[ \t]*\n[ \t]*([\p{Ll}]+)/gu, (_match,left,right)=>left.length>=6 && right.length<=3 ? `${left} ${right}` : `${left}${right}`)
     .replace(/[\u{1F300}-\u{1FAFF}▪◼●➢✈]/gu, "")
     .split(/\r?\n/)
     .map((line) => line.replace(/[ \t]+/g, " ").trim())
@@ -144,12 +152,15 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
     const text=sanitizeExtractedCvText(paragraphs.join("\n"));
     onProgress?.(100); return text;
   }
-  if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return file.text();
+  if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return sanitizeExtractedCvText(await file.text());
   let text="";
   try {
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-    if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc=`//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
-    const document=await pdfjs.getDocument({data:await file.arrayBuffer(),useSystemFonts:true}).promise;
+    // Utiliser le worker livré avec l'application : le CDN public peut être
+    // bloqué par le navigateur et laisser l'extraction à zéro caractère.
+    if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();
+    const pdfOptions={data:await file.arrayBuffer(),useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+    const document=await pdfjs.getDocument(pdfOptions).promise;
     const pages:string[]=[];
     for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
       const page=await document.getPage(pageNumber); const content=await page.getTextContent();
@@ -190,20 +201,45 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
     try {
       onProgress?.(15);
       const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const options={data:await file.arrayBuffer(),disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+      const options={data:await file.arrayBuffer(),useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
       const pdfDocument=await pdfjs.getDocument(options).promise;
       const { createWorker } = await import("tesseract.js");
-      const worker=await createWorker("fra+eng");
+      // Les chemins implicites de Tesseract changent selon le bundler et
+      // provoquaient un `Failed to fetch` sur les PDF scannés en production.
+      // Déclarer explicitement les ressources rend l'OCR reproductible sur Vercel.
+      const ocrWorkerOptions = {
+        langPath: "https://tessdata.projectnaptha.com/4.0.0",
+        workerPath: "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/worker.min.js",
+        corePath: "https://cdn.jsdelivr.net/npm/tesseract.js-core@7.0.0",
+        logger: (message: { progress?: number }) => {
+          if (typeof message.progress === "number") {
+            onProgress?.(Math.round(20 + message.progress * 65));
+          }
+        },
+      };
+      let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
       const ocrPages:string[]=[];
       const pageCount=Math.min(pdfDocument.numPages, 5);
-      for(let pageNumber=1;pageNumber<=pageCount;pageNumber++){
-        const page=await pdfDocument.getPage(pageNumber); const viewport=page.getViewport({scale:1.5});
-        const canvas=document.createElement("canvas"); canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
-        await page.render({canvas,viewport}).promise;
-        const result=await worker.recognize(canvas); ocrPages.push(result.data.text);
-        onProgress?.(Math.round(20+(pageNumber/pageCount)*75));
+      try {
+        // Les CV sont majoritairement francophones ; l'anglais est un repli
+        // pour les documents internationaux ou lorsque le pack français est
+        // momentanément indisponible.
+        try {
+          worker = await createWorker("fra", 1, ocrWorkerOptions as never);
+        } catch {
+          worker = await createWorker("eng", 1, ocrWorkerOptions as never);
+        }
+        for(let pageNumber=1;pageNumber<=pageCount;pageNumber++){
+          const page=await pdfDocument.getPage(pageNumber); const viewport=page.getViewport({scale:1.5});
+          const canvas=document.createElement("canvas"); canvas.width=Math.ceil(viewport.width); canvas.height=Math.ceil(viewport.height);
+          await page.render({canvas,viewport}).promise;
+          const result=await worker.recognize(canvas); ocrPages.push(result.data.text);
+          onProgress?.(Math.round(20+(pageNumber/pageCount)*75));
+        }
+        text=sanitizeExtractedCvText(ocrPages.join("\n"));
+      } finally {
+        await worker?.terminate();
       }
-      await worker.terminate(); text=sanitizeExtractedCvText(ocrPages.join("\n"));
     } catch { /* OCR is best-effort; the user receives a precise message below. */ }
   }
   if (text.trim().length<40) throw new Error("Ce PDF ne contient pas assez de texte lisible, même après OCR. Essayez un PDF plus net ou un DOCX.");

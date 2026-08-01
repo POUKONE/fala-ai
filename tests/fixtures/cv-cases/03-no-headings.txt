@@ -1,0 +1,10 @@
+Nora Diallo
+Développeuse Web | nora@example.test | Marseille
+Développeuse avec deux ans d'expérience en interfaces web accessibles.
+09/2023 - Présent — Développeuse front-end, Studio Exemple
+Création d'interfaces React et maintenance CSS.
+06/2022 - 08/2023 — Stage développement web, Web Exemple
+Participation à des fonctionnalités JavaScript.
+HTML, CSS, JavaScript, React, Git
+Licence Informatique — Université Exemple — 2020-2023
+Français bilingue, anglais courant
