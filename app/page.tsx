@@ -97,10 +97,18 @@ function createPdfBlob(text:string) {
   let pdf="%PDF-1.4\n"; const offsets=[0]; objects.forEach((object,index)=>{offsets.push(pdf.length);pdf+=`${index+1} 0 obj\n${object}\nendobj\n`;}); const xref=pdf.length; pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n${offsets.slice(1).map((offset)=>String(offset).padStart(10,"0")+" 00000 n ").join("\n")}\ntrailer\n<< /Size ${objects.length+1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([pdf],{type:"application/pdf"});
 }
+function createApplicationsTablePdf(rows:Application[]) {
+  const columns=["Entreprise","Poste","Statut","Score","Localisation"]; const widths=[125,185,85,55,146]; const x0=36; const headerY=728; const rowHeight=22; const commands:string[]=[];
+  commands.push("0.08 0.22 0.38 rg", "BT /F2 18 Tf 36 770 Td (FALA AI - MES CANDIDATURES) Tj ET", "0.25 0.25 0.25 rg", "BT /F1 9 Tf 36 753 Td (Export lisible de vos candidatures) Tj ET", "0.08 0.22 0.38 rg", `36 ${headerY} 576 24 re f`);
+  let x=x0; columns.forEach((column,index)=>{commands.push(`1 1 1 rg BT /F2 8 Tf ${x+4} ${headerY+8} Td (${escapePdf(column)}) Tj ET`);x+=widths[index];});
+  rows.slice(0,30).forEach((row,index)=>{const y=headerY-(index+1)*rowHeight;let cellX=x0;if(index%2===0)commands.push("0.95 0.97 0.99 rg",`${x0} ${y} 576 ${rowHeight} re f`);const values=[row.company,row.role,row.status,row.score===null?"-":String(row.score)+"/100",row.location||"-"];values.forEach((value,cell)=>{commands.push("0.15 0.15 0.18 rg",`BT /F1 8 Tf ${cellX+4} ${y+7} Td (${escapePdf(String(value).slice(0,cell===1?30:22))}) Tj ET`);cellX+=widths[cell];});});
+  commands.push("0.65 0.69 0.74 RG 0.5 w",`36 ${headerY} m 612 ${headerY} l S`,`36 ${headerY+24} m 612 ${headerY+24} l S`);for(let i=0;i<=Math.min(rows.length,30);i++){const y=headerY-i*rowHeight;commands.push(`36 ${y} m 612 ${y} l S`);}let gridX=x0;for(const width of widths){commands.push(`${gridX} ${headerY+24} m ${gridX} ${headerY-Math.min(rows.length,30)*rowHeight} l S`);gridX+=width;}commands.push("612 752 m 612 50 l S");
+  if(rows.length>30)commands.push("0.35 0.35 0.35 rg",`BT /F1 8 Tf 36 38 Td (+ ${rows.length-30} candidatures supplémentaires non affichées dans cet aperçu) Tj ET`);
+  const stream=commands.join("\n"); const objects=["<< /Type /Catalog /Pages 2 0 R >>","<< /Type /Pages /Kids [3 0 R] /Count 1 >>","<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>","<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>","<< /Length "+stream.length+" >>\nstream\n"+stream+"\nendstream"];let pdf="%PDF-1.4\n";const offsets:number[]=[];objects.forEach((object,index)=>{offsets.push(pdf.length);pdf+=String(index+1)+" 0 obj\n"+object+"\nendobj\n";});const xref=pdf.length;pdf+="xref\n0 "+(objects.length+1)+"\n0000000000 65535 f \n"+offsets.map((offset)=>String(offset).padStart(10,"0")+" 00000 n ").join("\n")+"\ntrailer\n<< /Size "+(objects.length+1)+" /Root 1 0 R >>\nstartxref\n"+xref+"\n%%EOF";return new Blob([pdf],{type:"application/pdf"});
+}
 function downloadPdf(text:string) { previewPdf(text); }
 function downloadApplicationsPdf(rows:Application[]) {
-  const text=["FALA AI - MES CANDIDATURES","", "Entreprise | Poste | Statut | Score | Localisation", ...rows.map((row)=>`${row.company} | ${row.role} | ${row.status} | ${row.score??"-"}/100 | ${row.location||""}${row.next_action_at?` | Prochaine action : ${row.next_action_at}`:""}`)].join("\n");
-  const url=URL.createObjectURL(createPdfBlob(text)); const link=document.createElement("a"); link.href=url; link.download="fala-ai-candidatures.pdf"; link.click(); window.setTimeout(()=>URL.revokeObjectURL(url),1000);
+  downloadBlob(createApplicationsTablePdf(rows),"fala-ai-candidatures.pdf");
 }
 function previewPdf(text:string) {
   const url=URL.createObjectURL(createPdfBlob(text));
