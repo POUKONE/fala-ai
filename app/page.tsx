@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import JSZip from "jszip";
 
 import { csrfFetch } from "./csrf-client";
@@ -510,9 +511,9 @@ export default function Home() {
 
   if (!currentUser) return <main className="public-shell">
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
-    <header className="public-nav"><div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div><div className="public-auth-links"><a className="public-login" href="/auth">Connexion</a><a className="public-register" href="/auth?mode=register">Créer un compte</a></div></header>
-    <section className="public-hero"><div className="public-copy"><span className="public-kicker">SUIVI INTELLIGENT DES CANDIDATURES</span><h1>Votre recherche d’emploi.<br/><em>Enfin sous contrôle.</em></h1><p>Centralisez vos candidatures, calculez leur compatibilité et pilotez chaque prochaine action depuis un espace privé.</p><div className="public-actions"><a className="public-cta" href="/auth?mode=register">Créer mon espace →</a><span>Identité vérifiée · Données isolées · Historique conservé</span></div></div><div className="public-orbit" aria-hidden="true"><div className="public-core"><span>94</span><small>MATCH</small></div><i className="orbit-card one">Candidature</i><i className="orbit-card two">Entretien</i><i className="orbit-card three">Offre</i></div></section>
-    <section className="public-features"><article><span>01</span><h2>Pipeline vivant</h2><p>Liste, Kanban, statuts et échéances restent synchronisés avec vos données.</p></article><article><span>02</span><h2>Scoring explicable</h2><p>Chaque score s’appuie sur vos compétences, votre expérience et vos préférences.</p></article><article><span>03</span><h2>Suivi personnel</h2><p>Vos candidatures appartiennent uniquement à votre compte authentifié.</p></article></section><footer className="public-footer"><a href="/privacy">Confidentialité</a><a href="/terms">Conditions d’utilisation</a></footer>
+    <header className="public-nav"><div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div><div className="public-auth-links"><Link className="public-login" href="/auth">Connexion</Link><Link className="public-register" href="/auth?mode=register">Créer un compte</Link></div></header>
+    <section className="public-hero"><div className="public-copy"><span className="public-kicker">SUIVI INTELLIGENT DES CANDIDATURES</span><h1>Votre recherche d’emploi.<br/><em>Enfin sous contrôle.</em></h1><p>Centralisez vos candidatures, calculez leur compatibilité et pilotez chaque prochaine action depuis un espace privé.</p><div className="public-actions"><Link className="public-cta" href="/auth?mode=register">Créer mon espace →</Link><span>Identité vérifiée · Données isolées · Historique conservé</span></div></div><div className="public-orbit" aria-hidden="true"><div className="public-core"><span>94</span><small>MATCH</small></div><i className="orbit-card one">Candidature</i><i className="orbit-card two">Entretien</i><i className="orbit-card three">Offre</i></div></section>
+    <section className="public-features"><article><span>01</span><h2>Pipeline vivant</h2><p>Liste, Kanban, statuts et échéances restent synchronisés avec vos données.</p></article><article><span>02</span><h2>Scoring explicable</h2><p>Chaque score s’appuie sur vos compétences, votre expérience et vos préférences.</p></article><article><span>03</span><h2>Suivi personnel</h2><p>Vos candidatures appartiennent uniquement à votre compte authentifié.</p></article></section><footer className="public-footer"><Link href="/privacy">Confidentialité</Link><Link href="/terms">Conditions d’utilisation</Link></footer>
   </main>;
 
   if(suspension)return <main className="account-state"><span className="brand-mark">F</span><h1>Compte suspendu</h1><p>{suspension}</p><p>Vous pouvez demander un examen à l’administrateur : ibrahimapoukone@gmail.com.</p><a href="/api/auth/logout">Se déconnecter</a></main>;
