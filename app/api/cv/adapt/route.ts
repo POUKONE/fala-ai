@@ -33,6 +33,7 @@ function buildLocalAdaptation(cv:string,target:string,matchedSkills:string[]) {
   const sections=new Map<string,string[]>(); let current="EXPÉRIENCE";
   for(const line of lines.slice(header.length)) { const next=canonicalSection(line); if(next){current=next; if(!sections.has(current)) sections.set(current,[]); continue;} sections.set(current,[...(sections.get(current)??[]),line]); }
   const output=[...header,"",...(target?["PROFIL CIBLE",target,""]:[])];
+  if (matchedSkills.length) output.push("ALIGNEMENT OFFRE", "Compétences du CV correspondant à l'offre :", ...matchedSkills.map((skill)=>`- ${skill}`), "");
   for(const section of ["EXPÉRIENCE","FORMATION","COMPÉTENCES","PROFIL"]) { const items=sections.get(section)??[]; if(!items.length && section!=="COMPÉTENCES") continue; output.push(section); if(section==="COMPÉTENCES"){ const skills=[...new Set([...items,...matchedSkills])]; output.push(...(skills.length?skills:["Compétences présentes dans le CV à vérifier"])); } else output.push(...items); output.push(""); }
   return output.join("\n").replace(/\n{3,}/g,"\n\n").trim();
 }
@@ -50,8 +51,8 @@ export interface ResumeATS {
 function formatStructuredAdaptation(result:ResumeATS) {
   const header=result.header; const contact=[header.email,header.phone,header.location,header.linkedinUrl,header.mobility].filter(Boolean).join(" | ");
   const lines=[header.fullName,header.targetTitle,contact,"","PROFIL",result.summary.trim(),""];
-  if(result.skills.length) lines.push("COMPÉTENCES",...result.skills.flatMap((group)=>[`${group.category}:`,...group.items.map((item)=>`• ${item}`),""]));
-  if(result.experiences.length) lines.push("EXPÉRIENCE",...result.experiences.flatMap((experience)=>[`${experience.jobTitle} | ${experience.company} | ${experience.location} | ${experience.startDate} - ${experience.endDate}`,...experience.bulletPoints.map((item)=>`• ${item}`),""]));
+  if(result.skills.length) lines.push("COMPÉTENCES",...result.skills.flatMap((group)=>[`${group.category}:`,...group.items.map((item)=>`- ${item}`),""]));
+  if(result.experiences.length) lines.push("EXPÉRIENCE",...result.experiences.flatMap((experience)=>[`${experience.jobTitle} | ${experience.company} | ${experience.location} | ${experience.startDate} - ${experience.endDate}`,...experience.bulletPoints.map((item)=>`- ${item}`),""]));
   if(result.education.length) lines.push("FORMATION",...result.education.map((item)=>`${item.degree} | ${item.institution} | ${item.location} | ${item.startYear} - ${item.endYear}`),"");
   if(result.languages?.length) lines.push("LANGUES",...result.languages.map((item)=>`${item.language}: ${item.proficiency}`),"");
   if(result.projects?.length) lines.push("PROJETS",...result.projects.flatMap((item)=>[item.title,item.description,`Technologies: ${item.technologies.join(", ")}`,""]));

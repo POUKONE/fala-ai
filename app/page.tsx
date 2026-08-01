@@ -107,6 +107,20 @@ async function downloadDocx(text:string) {
   downloadBlob(await zip.generateAsync({type:"blob",compression:"DEFLATE"}),"fala-ai-cv-ats.docx");
 }
 interface ReadCvOptions { onProgress?: (progress:number)=>void; }
+function sanitizeExtractedCvText(value:string) {
+  return value
+    .replace(/\u00a0/g, " ")
+    .replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">")
+    .replace(/â€™|â€˜/g, "'").replace(/â€œ|â€/g, '"').replace(/â€“|â€”|â€\u0093|â€\u0094/g, "-")
+    .replace(/dâ\s*experience/gi, "d'expérience")
+    .replace(/[\u{1F300}-\u{1FAFF}▪◼●➢✈]/gu, "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .filter((line) => line && !/^à$/.test(line) && !/^(?:[•▪◼●➢✈]|â€)[\s-]*$/.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
   const onProgress=typeof options === "function" ? options : options?.onProgress;
   const maxSizeMb=10;
@@ -127,7 +141,7 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
       const parts=[...body.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/gi)].map((item)=>decodeXml(item[1]));
       return parts.join("").replace(/\s+/g," ").trim();
     }).filter(Boolean);
-    const text=paragraphs.join("\n").trim();
+    const text=sanitizeExtractedCvText(paragraphs.join("\n"));
     onProgress?.(100); return text;
   }
   if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return file.text();
@@ -167,10 +181,10 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
       pages.push(columnText.join("\n\n"));
       onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));
     }
-    text=pages.join("\n").replace(/[ \t]+/g," ").trim();
+    text=sanitizeExtractedCvText(pages.join("\n"));
   } catch {
     const raw=new TextDecoder("latin1").decode(await file.arrayBuffer());
-    text=[...raw.matchAll(/\(([^()]*)\)\s*Tj/g)].map((match)=>match[1]).join(" ").replaceAll("\\n","\n").replaceAll("\\(","(").replaceAll("\\)",")").trim();
+    text=sanitizeExtractedCvText([...raw.matchAll(/\(([^()]*)\)\s*Tj/g)].map((match)=>match[1]).join(" ").replaceAll("\\n","\n").replaceAll("\\(","(").replaceAll("\\)",")"));
   }
   if (text.trim().length<40) {
     try {
@@ -189,7 +203,7 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
         const result=await worker.recognize(canvas); ocrPages.push(result.data.text);
         onProgress?.(Math.round(20+(pageNumber/pageCount)*75));
       }
-      await worker.terminate(); text=ocrPages.join("\n").replace(/[ \t]+/g," ").trim();
+      await worker.terminate(); text=sanitizeExtractedCvText(ocrPages.join("\n"));
     } catch { /* OCR is best-effort; the user receives a precise message below. */ }
   }
   if (text.trim().length<40) throw new Error("Ce PDF ne contient pas assez de texte lisible, même après OCR. Essayez un PDF plus net ou un DOCX.");
