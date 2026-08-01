@@ -25,6 +25,7 @@ function AuthPageContent() {
   useEffect(() => { const hash = new URLSearchParams(window.location.hash.replace(/^#/, "")); const token = hash.get("access_token") ?? ""; if (token && hash.get("type") === "recovery") { setSupabaseRecoveryToken(token); setMode("reset"); window.history.replaceState({}, "", `${window.location.pathname}?mode=reset`); } }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
   const [consent, setConsent] = useState(false);
   const [signupStep, setSignupStep] = useState<"email" | "code" | "password">("email");
@@ -42,6 +43,7 @@ function AuthPageContent() {
     const isBackForward = navigation?.type === "back_forward";
     const signOutAfterBack = () => {
       window.sessionStorage.removeItem(TAB_SESSION_KEY);
+      setEmail(""); setPassword(""); setName(""); setShowPassword(false); setCaptchaToken("");
       // Going back from a workspace to the auth page is an explicit logout.
       // A normal direct visit (including a copied link in a new tab) does not
       // invalidate the account session.
@@ -88,7 +90,12 @@ function AuthPageContent() {
     try {
       const response = await csrfFetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) { setCaptchaRequired(Boolean(data.captchaRequired)); throw new Error(data.error || "Impossible de traiter la demande."); }
+      if (!response.ok) {
+        setCaptchaRequired(Boolean(data.captchaRequired));
+        if (response.status === 401) throw new Error(String(data.error ?? "").toLowerCase().includes("session") ? "Session expirée. Veuillez vous reconnecter." : "Identifiants incorrects");
+        if (response.status === 403 && /suspend/i.test(String(data.error ?? ""))) throw new Error("Compte suspendu");
+        throw new Error(data.error || "Impossible de traiter la demande.");
+      }
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
       else if (mode === "reset") { setMode("login"); setMessage("Mot de passe modifié. Vous pouvez vous connecter."); }
       else if (mode === "register" && signupStep === "email") { setSignupStep("code"); setPassword(""); setMessage(data.message || "Un code de vérification vient d’être envoyé."); }
@@ -119,11 +126,11 @@ function AuthPageContent() {
         <div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>Connexion</button><button className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>Inscription</button></div>
         <h2>{title}</h2><p className="auth-subtitle">{requiresFreshAuth && mode === "login" ? "Pour votre sécurité, reconnectez-vous dans ce nouvel onglet." : mode === "forgot" ? "Saisissez votre adresse et nous vous aiderons à retrouver votre compte." : "Utilisez votre adresse e-mail et un mot de passe."}</p>
         {error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}
-        <form onSubmit={submit} autoComplete="off">
+        <form onSubmit={submit} autoComplete={mode === "login" ? "on" : "off"}>
           {mode === "register" && <label>Nom complet affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Ex. Ibrahim POUKONE" minLength={2} maxLength={120} required /><small>Ce nom sera visible dans votre espace Fala AI.</small></label>}
-          {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" required /></label>}
+          {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete={mode === "login" ? "username" : "email"} required /></label>}
           {mode === "register" && signupStep === "code" && <label>Code reçu par e-mail<input inputMode="numeric" pattern="[0-9]{6}" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={6} autoComplete="one-time-code" required /><small>Le code est valable 10 minutes</small></label>}
-          {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete="new-password" required /><small>8 caractères minimum</small></label>}
+          {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<span className="auth-password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /><button type="button" className="auth-password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={showPassword}>{showPassword ? "Masquer" : "Afficher"}</button></span><small>8 caractères minimum</small></label>}
           {mode === "login" && captchaRequired && <div className="auth-captcha"><div ref={captchaContainer} /><small>Une vérification anti-abus peut être demandée après plusieurs tentatives.</small></div>}
           {mode === "register" && <label className="auth-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />J’accepte la <Link href="/privacy" target="_blank">politique de confidentialité</Link> et les <Link href="/terms" target="_blank">conditions d’utilisation</Link>.</label>}
           <button className="auth-submit" disabled={busy}>{busy ? "Veuillez patienter…" : mode === "register" ? (signupStep === "email" ? "Recevoir le code" : signupStep === "code" ? "Valider le code" : "Créer mon compte") : mode === "forgot" ? "Envoyer le lien" : "Se connecter"}</button>

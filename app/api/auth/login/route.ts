@@ -27,7 +27,7 @@ function limited(response: Response, seconds = 900) {
 }
 
 function invalidCredentials() {
-  return Response.json({ error: "Identifiants invalides" }, { status: 401, headers: { "Cache-Control": "no-store" } });
+  return Response.json({ error: "Identifiants incorrects" }, { status: 401, headers: { "Cache-Control": "no-store" } });
 }
 
 async function registerFailure(email: string, ip: string) {
