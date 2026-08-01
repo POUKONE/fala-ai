@@ -23,6 +23,7 @@ type ParsedOffer = {company?:string;role?:string;location?:string;contractType?:
 type NotificationReminder = {id:number;type:string;date:string;company:string;role:string;status:string};
 
 const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Archivée"];
+const TAB_SESSION_KEY = "fala_tab_session";
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
 const scoreMaximums:Record<string,number> = {skills:35,title:15,experience:15,location:10,education:10,contract:5,languages:5,salary:5};
 const scoreNames:Record<string,string> = {skills:"Compétences",title:"Intitulé du poste",experience:"Expérience",education:"Études",location:"Localisation",contract:"Contrat",languages:"Langues",sector:"Secteur",salary:"Salaire"};
@@ -379,8 +380,14 @@ export default function Home() {
     try {
       const meResponse = await csrfFetch("/api/me",{cache:"no-store"});
       const meData = await meResponse.json();
+      const tabSession = window.sessionStorage.getItem(TAB_SESSION_KEY);
+      if (meData.user && !tabSession) {
+        setCurrentUser(null); setIsAdmin(false); setAuthChecked(true); setLoading(false);
+        window.location.replace("/auth?reauth=1");
+        return;
+      }
       setCurrentUser(meData.user ?? null); setIsAdmin(Boolean(meData.isAdmin)); setConsentRequired(Boolean(meData.consentRequired)); setSuspension(meData.suspended?String(meData.suspensionReason||"Compte suspendu"):null); setAuthChecked(true);
-      if (!meData.user) { setApplications([]); setProfile(null); setActivity([]); return; }
+      if (!meData.user) { window.sessionStorage.removeItem(TAB_SESSION_KEY); setApplications([]); setProfile(null); setActivity([]); return; }
       if (meData.suspended || meData.consentRequired) { setApplications([]); setProfile(null); setActivity([]); return; }
       const [appsResponse,profileResponse,activityResponse] = await Promise.all([csrfFetch("/api/applications",{cache:"no-store"}),csrfFetch("/api/profile",{cache:"no-store"}),csrfFetch("/api/activity",{cache:"no-store"})]);
       if (!appsResponse.ok || !profileResponse.ok || !activityResponse.ok) throw new Error(appsResponse.status===401?"Votre session a expiré. Reconnectez-vous.":"Impossible de charger vos données.");
