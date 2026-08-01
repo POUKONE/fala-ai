@@ -22,7 +22,15 @@ function AuthPageContent() {
   // can leave it empty after the browser hydrates a password-reset link.
   const resetToken = params.get("token") ?? "";
   const [supabaseRecoveryToken, setSupabaseRecoveryToken] = useState("");
-  useEffect(() => { const hash = new URLSearchParams(window.location.hash.replace(/^#/, "")); const token = hash.get("access_token") ?? ""; if (token && hash.get("type") === "recovery") { setSupabaseRecoveryToken(token); setMode("reset"); window.history.replaceState({}, "", `${window.location.pathname}?mode=reset`); } }, []);
+  const resetExpiryFromUrl = Number(params.get("expires") ?? 0);
+  const [resetDeadline, setResetDeadline] = useState(resetExpiryFromUrl || 0);
+  const [recoveryDeadline, setRecoveryDeadline] = useState(0);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
+  const [clock, setClock] = useState(() => Date.now());
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => { const hash = new URLSearchParams(window.location.hash.replace(/^#/, "")); const token = hash.get("access_token") ?? ""; if (token && hash.get("type") === "recovery") { setSupabaseRecoveryToken(token); setResetDeadline(Date.now() + 3600000); setMode("reset"); window.history.replaceState({}, "", `${window.location.pathname}?mode=reset`); } }, []);
+  useEffect(() => { if (!recoveryDeadline && !resendAvailableAt && !resetDeadline) return; const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => window.clearInterval(timer); }, [recoveryDeadline, resendAvailableAt, resetDeadline]);
+  useEffect(() => { if (mode === "reset" && !resetDeadline) setResetDeadline(Date.now() + 3600000); }, [mode, resetDeadline]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -37,6 +45,10 @@ function AuthPageContent() {
   const captchaContainer = useRef<HTMLDivElement>(null);
   const captchaWidget = useRef<string | null>(null);
   const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const resetExpired = mode === "reset" && resetDeadline > 0 && resetDeadline <= clock;
+  const recoverySeconds = recoveryDeadline > clock ? Math.ceil((recoveryDeadline - clock) / 1000) : 0;
+  const resendSeconds = resendAvailableAt > clock ? Math.ceil((resendAvailableAt - clock) / 1000) : 0;
+  const formatRemaining = (seconds: number) => `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
 
   useEffect(() => {
     const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
@@ -82,7 +94,9 @@ function AuthPageContent() {
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setBusy(true); setError(""); setMessage("");
+    event.preventDefault();
+    if (resetExpired) { setError("Ce lien de récupération a expiré. Demandez un nouveau lien."); return; }
+    setBusy(true); setError(""); setMessage("");
     const endpoint = mode === "register" ? (signupStep === "email" ? "/api/auth/send-code" : signupStep === "code" ? "/api/auth/verify-code" : "/api/auth/register") : mode === "forgot" ? "/api/auth/forgot" : mode === "reset" ? "/api/auth/reset-password" : "/api/auth/login";
     const body = mode === "register" ? (signupStep === "email" ? { email, displayName: name, consent } : signupStep === "code" ? { email, code: password } : { email, password, displayName: name, consent }) : mode === "reset" ? { token: resetToken, accessToken: supabaseRecoveryToken, password } : { email, password, captchaToken };
     const controller = new AbortController();
@@ -96,7 +110,7 @@ function AuthPageContent() {
         if (response.status === 403 && /suspend/i.test(String(data.error ?? ""))) throw new Error("Compte suspendu");
         throw new Error(data.error || "Impossible de traiter la demande.");
       }
-      if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
+      if (mode === "forgot") { const ttl = Number(data.expiresInSeconds ?? 3600); setRecoveryDeadline(Date.now() + ttl * 1000); setResendAvailableAt(Date.now() + 60000); setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
       else if (mode === "reset") { setMode("login"); setMessage("Mot de passe modifié. Vous pouvez vous connecter."); }
       else if (mode === "register" && signupStep === "email") { setSignupStep("code"); setPassword(""); setMessage(data.message || "Un code de vérification vient d’être envoyé."); }
       else if (mode === "register" && signupStep === "code") { setSignupStep("password"); setPassword(""); setMessage(data.message || "Adresse vérifiée. Choisissez maintenant votre mot de passe."); }
@@ -126,14 +140,16 @@ function AuthPageContent() {
         <div className="auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => switchMode("login")}>Connexion</button><button className={mode === "register" ? "active" : ""} onClick={() => switchMode("register")}>Inscription</button></div>
         <h2>{title}</h2><p className="auth-subtitle">{requiresFreshAuth && mode === "login" ? "Pour votre sécurité, reconnectez-vous dans ce nouvel onglet." : mode === "forgot" ? "Saisissez votre adresse et nous vous aiderons à retrouver votre compte." : "Utilisez votre adresse e-mail et un mot de passe."}</p>
         {error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}
-        <form onSubmit={submit} autoComplete={mode === "login" ? "on" : "off"}>
+        <form ref={formRef} onSubmit={submit} autoComplete={mode === "login" ? "on" : "off"}>
           {mode === "register" && <label>Nom complet affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Ex. Ibrahim POUKONE" minLength={2} maxLength={120} required /><small>Ce nom sera visible dans votre espace Fala AI.</small></label>}
           {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete={mode === "login" ? "username" : "email"} required /></label>}
           {mode === "register" && signupStep === "code" && <label>Code reçu par e-mail<input inputMode="numeric" pattern="[0-9]{6}" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={6} autoComplete="one-time-code" required /><small>Le code est valable 10 minutes</small></label>}
           {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<span className="auth-password-field"><input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === "login" ? "current-password" : "new-password"} required /><button type="button" className="auth-password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={showPassword}>{showPassword ? "Masquer" : "Afficher"}</button></span><small>8 caractères minimum</small></label>}
           {mode === "login" && captchaRequired && <div className="auth-captcha"><div ref={captchaContainer} /><small>Une vérification anti-abus peut être demandée après plusieurs tentatives.</small></div>}
           {mode === "register" && <label className="auth-consent"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required />J’accepte la <Link href="/privacy" target="_blank">politique de confidentialité</Link> et les <Link href="/terms" target="_blank">conditions d’utilisation</Link>.</label>}
-          <button className="auth-submit" disabled={busy}>{busy ? "Veuillez patienter…" : mode === "register" ? (signupStep === "email" ? "Recevoir le code" : signupStep === "code" ? "Valider le code" : "Créer mon compte") : mode === "forgot" ? "Envoyer le lien" : "Se connecter"}</button>
+          {mode === "forgot" && recoveryDeadline > 0 && <div className="auth-expiry" role="status"><span>Le lien est valable encore {recoverySeconds > 0 ? formatRemaining(recoverySeconds) : "jusqu’à 1 heure"}.</span><button type="button" className="auth-resend" disabled={busy || resendSeconds > 0} onClick={() => formRef.current?.requestSubmit()}>{resendSeconds > 0 ? `Renvoyer dans ${resendSeconds}s` : "Renvoyer un nouveau lien"}</button></div>}
+          {mode === "reset" && resetDeadline > 0 && <div className={`auth-expiry${resetExpired ? " expired" : ""}`} role="status"><span>{resetExpired ? "Ce lien a expiré." : `Ce lien expire dans ${formatRemaining(Math.ceil((resetDeadline - clock) / 1000))}.`}</span>{resetExpired && <button type="button" className="auth-resend" onClick={() => switchMode("forgot")}>Demander un nouveau lien</button>}</div>}
+          <button className="auth-submit" disabled={busy || resetExpired}>{busy ? "Veuillez patienter…" : mode === "register" ? (signupStep === "email" ? "Recevoir le code" : signupStep === "code" ? "Valider le code" : "Créer mon compte") : mode === "forgot" ? "Envoyer le lien" : "Se connecter"}</button>
         </form>
         {mode === "login" && <button className="auth-forgot" onClick={() => switchMode("forgot")}>Mot de passe oublié ?</button>}
         {mode === "forgot" && <button className="auth-forgot" onClick={() => switchMode("login")}>Retour à la connexion</button>}

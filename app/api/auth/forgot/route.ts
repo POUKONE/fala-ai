@@ -4,11 +4,12 @@ import { sendTransactionalMail } from "../../../../db/mailer";
 import { hashOpaqueToken } from "../../../email-auth";
 
 export const dynamic = "force-dynamic";
+const RESET_TTL_SECONDS = 3600;
 
 export async function POST(request: Request) {
   const { email } = await request.json() as { email?: string };
   const value = String(email ?? "").trim().toLowerCase();
-  const generic = { ok: true, message: "Si cette adresse existe, un lien de récupération sera envoyé." };
+  const generic = { ok: true, message: "Si cette adresse existe, un lien de récupération sera envoyé.", expiresInSeconds: RESET_TTL_SECONDS };
   if (!/^\S+@\S+\.\S+$/.test(value)) return Response.json(generic);
   // Five requests per 15 minutes is enough for normal retries while keeping
   // automated abuse contained. The v2 key also avoids locking users who were
@@ -17,8 +18,9 @@ export async function POST(request: Request) {
   const token = crypto.randomUUID();
   const account = await getPostgresDb().prepare("SELECT email FROM users WHERE lower(email)=lower(?)").bind(value).first<{ email: string }>();
   if (account) {
-    await getPostgresDb().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(await hashOpaqueToken(token), new Date(Date.now() + 3600000).toISOString(), value).run();
-    const resetUrl = new URL(`/auth?mode=reset&token=${encodeURIComponent(token)}`, request.url).toString();
+    const expiresAt = new Date(Date.now() + RESET_TTL_SECONDS * 1000);
+    await getPostgresDb().prepare("UPDATE users SET reset_token=?,reset_token_expires_at=? WHERE lower(email)=lower(?)").bind(await hashOpaqueToken(token), expiresAt.toISOString(), value).run();
+    const resetUrl = new URL(`/auth?mode=reset&token=${encodeURIComponent(token)}&expires=${expiresAt.getTime()}`, request.url).toString();
     const delivery = await sendTransactionalMail({
       to: value,
       subject: "Modifier votre mot de passe Fala AI",
