@@ -477,7 +477,7 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
-  useEffect(()=>{ const link=document.querySelector<HTMLAnchorElement>('a[href="/api/account/export"]'); if(link) link.textContent="Exporter mes données (CSV Excel)"; },[modal]);
+  useEffect(()=>{ const link=document.querySelector<HTMLAnchorElement>('a[href="/api/account/export"]'); if(link){ link.textContent="Exporter mes candidatures (CSV Excel)"; if(!document.querySelector('a[data-export-pdf]')){ const pdfLink=document.createElement("a"); pdfLink.href="/api/account/export?format=pdf"; pdfLink.download="fala-ai-candidatures.pdf"; pdfLink.dataset.exportPdf="true"; pdfLink.textContent="Télécharger mes candidatures (PDF)"; link.after(pdfLink); } } },[modal]);
   useEffect(()=>{
     const revalidateOnRestore = (event: PageTransitionEvent) => { if (event.persisted) void loadData(); };
     window.addEventListener("pageshow", revalidateOnRestore);
