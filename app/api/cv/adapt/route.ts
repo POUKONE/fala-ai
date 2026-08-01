@@ -368,6 +368,8 @@ export async function POST(request: Request) {
   if (!user) return Response.json({ error: "Authentification requise" }, { status: 401 });
   if ((await getAccountState(user.email))?.suspended_at) return Response.json({ error: "Compte suspendu" }, { status: 403 });
   if (!await enforceRateLimit(user.email, "cv-adapt", 8, 3600)) return Response.json({ error: "Limite d’adaptations atteinte pour cette heure" }, { status: 429 });
+  const contentLength = Number(request.headers.get("content-length") ?? 0);
+  if (contentLength > 100_000) return Response.json({ error: "La requête CV est trop volumineuse (100 Ko maximum)." }, { status: 413 });
   try {
     const body = await request.json().catch(() => ({})) as { offer?: string; cv?: string };
     const offer = String(body.offer ?? "").trim().slice(0, 30000);

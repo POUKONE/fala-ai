@@ -151,16 +151,46 @@ function sanitizeExtractedCvText(value:string) {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+const CV_MAX_SIZE = 10 * 1024 * 1024;
+const CV_MAX_TEXT = 120_000;
+const CV_MAX_PAGES = 8;
+const CV_READ_TIMEOUT = 60_000;
+
+function hasBytes(bytes:Uint8Array, expected:number[]) { return expected.every((value,index)=>bytes[index]===value); }
+
 async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
+  const task=readCvFileInternal(file,options);
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  const timeout=new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error("La lecture du fichier dépasse le délai maximal de 60 secondes.")),CV_READ_TIMEOUT);});
+  try { return await Promise.race([task,timeout]); } finally { if(timer) clearTimeout(timer); }
+}
+
+async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:number)=>void)) {
   const onProgress=typeof options === "function" ? options : options?.onProgress;
-  const maxSizeMb=10;
-  if(file.size>maxSizeMb*1024*1024) throw new Error(`Le fichier dépasse la taille maximale autorisée (${maxSizeMb} Mo).`);
+  if(file.size>CV_MAX_SIZE) throw new Error("Le fichier dépasse la taille maximale autorisée (10 Mo).");
   onProgress?.(5);
   const filename=file.name.toLowerCase();
+  const bytes=new Uint8Array(await file.arrayBuffer());
+  const isPdf=hasBytes(bytes,[0x25,0x50,0x44,0x46]);
+  const isDocx=hasBytes(bytes,[0x50,0x4b,0x03,0x04]);
+  const textExtension=/\.(txt|md|csv)$/i.test(filename);
+  const declaredDocx=file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const declaredPdf=file.type === "application/pdf";
+  if ((filename.endsWith(".pdf") || declaredPdf) && !isPdf) throw new Error("Le fichier ne correspond pas à un PDF valide.");
+  if ((filename.endsWith(".docx") || declaredDocx) && !isDocx) throw new Error("Le fichier ne correspond pas à un DOCX valide.");
+  if (!isPdf && !isDocx && !textExtension) throw new Error("Format non supporté. Utilisez un PDF, un DOCX ou un fichier texte.");
   if (filename.endsWith(".docx") || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-    const zip=await JSZip.loadAsync(await file.arrayBuffer()); const documentFile=zip.file("word/document.xml");
+    const zip=await JSZip.loadAsync(bytes,{checkCRC32:false,createFolders:false});
+    const entries=Object.values(zip.files);
+    if(entries.length>2000) throw new Error("DOCX refusé : archive contenant trop d’éléments.");
+    const uncompressedSize=entries.reduce((total,entry)=>total+Number((entry as unknown as {_data?:{uncompressedSize?:number}})._data?.uncompressedSize??0),0);
+    if(uncompressedSize>50*1024*1024) throw new Error("DOCX refusé : taille décompressée excessive.");
+    const documentFile=zip.file("word/document.xml");
     if (!documentFile) throw new Error("Le document DOCX ne contient pas de texte lisible.");
+    const documentSize=Number((documentFile as unknown as {_data?:{uncompressedSize?:number}})._data?.uncompressedSize??0);
+    if(documentSize>5*1024*1024) throw new Error("DOCX refusé : document XML trop volumineux.");
     const xml=await documentFile.async("text");
+    if(xml.length>5*1024*1024) throw new Error("DOCX refusé : document XML trop volumineux.");
     const decodeXml=(value:string)=>value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi,(entity)=>{
       const key=entity.slice(1,-1).toLowerCase();
       if(key==="amp")return "&"; if(key==="lt")return "<"; if(key==="gt")return ">"; if(key==="quot")return '"'; if(key==="apos")return "'"; if(key==="nbsp")return " ";
@@ -172,17 +202,24 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
       return parts.join("").replace(/\s+/g," ").trim();
     }).filter(Boolean);
     const text=sanitizeExtractedCvText(paragraphs.join("\n"));
+    if(text.length>CV_MAX_TEXT) throw new Error("Le texte extrait du DOCX dépasse la limite autorisée.");
     onProgress?.(100); return text;
   }
-  if (!filename.endsWith(".pdf") && file.type !== "application/pdf") return sanitizeExtractedCvText(await file.text());
+  if (!isPdf) {
+    if(bytes.subarray(0,4096).some((value)=>value===0)) throw new Error("Le fichier texte contient des données binaires non prises en charge.");
+    const text=sanitizeExtractedCvText(new TextDecoder().decode(bytes));
+    if(text.length>CV_MAX_TEXT) throw new Error("Le texte extrait dépasse la limite autorisée.");
+    return text;
+  }
   let text="";
   try {
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
     // Utiliser le worker livré avec l'application : le CDN public peut être
     // bloqué par le navigateur et laisser l'extraction à zéro caractère.
     if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();
-    const pdfOptions={data:await file.arrayBuffer(),useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+    const pdfOptions={data:bytes,useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
     const document=await pdfjs.getDocument(pdfOptions).promise;
+    if(document.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
     const pages:string[]=[];
     for(let pageNumber=1;pageNumber<=document.numPages;pageNumber++){
       const page=await document.getPage(pageNumber); const content=await page.getTextContent();
@@ -215,16 +252,18 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
       onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));
     }
     text=sanitizeExtractedCvText(pages.join("\n"));
-  } catch {
-    const raw=new TextDecoder("latin1").decode(await file.arrayBuffer());
+  } catch (error) {
+    if(error instanceof Error && /dépasse la limite/.test(error.message)) throw error;
+    const raw=new TextDecoder("latin1").decode(bytes);
     text=sanitizeExtractedCvText([...raw.matchAll(/\(([^()]*)\)\s*Tj/g)].map((match)=>match[1]).join(" ").replaceAll("\\n","\n").replaceAll("\\(","(").replaceAll("\\)",")"));
   }
   if (text.trim().length<40) {
     try {
       onProgress?.(15);
       const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const options={data:await file.arrayBuffer(),useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+      const options={data:bytes,useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
       const pdfDocument=await pdfjs.getDocument(options).promise;
+      if(pdfDocument.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
       const { createWorker } = await import("tesseract.js");
       // Les chemins implicites de Tesseract changent selon le bundler et
       // provoquaient un `Failed to fetch` sur les PDF scannés en production.
@@ -262,8 +301,12 @@ async function readCvFile(file:File,options?:ReadCvOptions|((progress:number)=>v
       } finally {
         await worker?.terminate();
       }
-    } catch { /* OCR is best-effort; the user receives a precise message below. */ }
+    } catch (error) {
+      if(error instanceof Error && /dépasse la limite/.test(error.message)) throw error;
+      /* OCR is best-effort; the user receives a precise message below. */
+    }
   }
+  if (text.length>CV_MAX_TEXT) throw new Error("Le texte extrait du PDF dépasse la limite autorisée.");
   if (text.trim().length<40) throw new Error("Ce PDF ne contient pas assez de texte lisible, même après OCR. Essayez un PDF plus net ou un DOCX.");
   onProgress?.(100); return text;
 }
