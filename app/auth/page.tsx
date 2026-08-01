@@ -67,8 +67,10 @@ function AuthPageContent() {
     event.preventDefault(); setBusy(true); setError(""); setMessage("");
     const endpoint = mode === "register" ? (signupStep === "email" ? "/api/auth/send-code" : signupStep === "code" ? "/api/auth/verify-code" : "/api/auth/register") : mode === "forgot" ? "/api/auth/forgot" : mode === "reset" ? "/api/auth/reset-password" : "/api/auth/login";
     const body = mode === "register" ? (signupStep === "email" ? { email, displayName: name, consent } : signupStep === "code" ? { email, code: password } : { email, password, displayName: name, consent }) : mode === "reset" ? { token: resetToken, accessToken: supabaseRecoveryToken, password } : { email, password, captchaToken };
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await csrfFetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await csrfFetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { setCaptchaRequired(Boolean(data.captchaRequired)); throw new Error(data.error || "Impossible de traiter la demande."); }
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }
@@ -78,8 +80,11 @@ function AuthPageContent() {
       else if (mode === "register" && data.requiresEmailConfirmation) { setMode("login"); setMessage(data.message || "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter."); }
       else if (mode === "register") { window.sessionStorage.setItem(TAB_SESSION_KEY, "1"); setMode("login"); setSignupStep("email"); setPassword(""); setMessage(data.message || "Votre compte est créé avec succès. Vous pouvez maintenant vous connecter."); }
       else { window.sessionStorage.setItem(TAB_SESSION_KEY, "1"); setCaptchaRequired(false); setCaptchaToken(""); router.push("/"); router.refresh(); }
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Une erreur est survenue."); }
-    finally { setBusy(false); }
+    } catch (cause) {
+      setError(cause instanceof DOMException && cause.name === "AbortError"
+        ? "La connexion prend trop de temps. Vérifiez votre réseau puis réessayez."
+        : cause instanceof Error ? cause.message : "Une erreur est survenue.");
+    } finally { window.clearTimeout(timeout); setBusy(false); }
   }
 
   const title = mode === "register" ? "Créer votre espace" : mode === "forgot" ? "Récupérer l’accès" : mode === "reset" ? "Nouveau mot de passe" : "Ravi de vous revoir";
