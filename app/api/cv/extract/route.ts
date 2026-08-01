@@ -22,6 +22,11 @@ export async function POST(request: Request) {
     runtime.DOMMatrix ??= class DOMMatrix {};
     runtime.Path2D ??= class Path2D {};
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+    // Load the worker module into the same isolate. PDF.js then uses its
+    // in-process handler and never tries to resolve a missing filesystem
+    // worker path in Vercel's serverless bundle.
+    const workerModule = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    (runtime as typeof runtime & { pdfjsWorker?: unknown }).pdfjsWorker = workerModule;
     const document = await pdfjs.getDocument({ data: bytes, disableWorker: true, isEvalSupported: false } as never).promise;
     if (document.numPages > MAX_PAGES) return Response.json({ error: `Le PDF dépasse la limite de ${MAX_PAGES} pages.` }, { status: 413 });
     const pages: string[] = [];
