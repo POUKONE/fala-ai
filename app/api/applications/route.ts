@@ -20,7 +20,10 @@ export async function GET() {
   if (!profile) return Response.json({ applications: result.results });
   const rows = result.results as Array<Record<string, unknown>>;
   const applications: Array<Record<string, unknown>> = rows.map((application) => ({ ...application, score: application.score ?? null, score_breakdown: application.score_breakdown ?? null }));
-  const changed = applications.filter((application) => application.score === null || !application.score_breakdown);
+  // Recalculate legacy zero scores after scoring rules change; a single
+  // contract/location/salary mismatch is now a weighted penalty, not a
+  // candidature-wide zero.
+  const changed = applications.filter((application) => application.score === null || application.score === 0 || !application.score_breakdown);
   if (changed.length) {
     const assessed = await Promise.all(changed.map(async (application) => ({ application, assessment: await calculateScoreWithAI(profile, application) })));
     await db.batch(assessed.map(({ application, assessment }) => {
