@@ -40,6 +40,21 @@ function qualityReport(source: string, output: string, matchedKeywords: string[]
   if (sections.length < 2) warnings.push("Moins de deux sections ATS standard ont été détectées.");
   return { sourceCharacters: source.length, resultCharacters: output.length, sections, keywordCoverage: coverage, warnings };
 }
+function compatibilityReport(cv: string, offer: string, parsed: ReturnType<typeof parseOfferText>, matchedSkills: string[], matchedKeywords: string[]) {
+  const requestedSkills = String(parsed.requiredSkills ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+  const missingSkills = requestedSkills.filter((skill) => !matchedSkills.some((match) => normalize(match) === normalize(skill)));
+  const cvNormalized = normalize(cv);
+  const roleTerms = normalize(String(parsed.role ?? "")).split(/[^a-z0-9+#]+/).filter((term) => term.length >= 4 && !STOP_WORDS.has(term));
+  const matchingRoleTerms = roleTerms.filter((term) => cvNormalized.includes(term));
+  const skillScore = requestedSkills.length ? matchedSkills.length / requestedSkills.length : Math.min(1, matchedKeywords.length / 8);
+  const roleScore = roleTerms.length ? matchingRoleTerms.length / roleTerms.length : 0.5;
+  const experienceScore = parsed.experienceRequired && /(?:19|20)\d{2}|exp[eé]rience|ans?/i.test(cv) ? 1 : parsed.experienceRequired ? 0.35 : 0.7;
+  const educationScore = parsed.educationRequired && /bac|bts|licence|master|dipl[oô]me|formation|[eé]tudes/i.test(cv) ? 1 : parsed.educationRequired ? 0.35 : 0.7;
+  const percentage = Math.max(0, Math.min(100, Math.round(skillScore * 60 + roleScore * 20 + experienceScore * 10 + educationScore * 10)));
+  const strengths = [...matchedSkills.slice(0, 3), ...(matchingRoleTerms.length ? [`Vocabulaire proche de l'intitulé : ${matchingRoleTerms.slice(0, 2).join(", ")}`] : [])].slice(0, 3);
+  const gaps = [...missingSkills.slice(0, 5), ...(parsed.experienceRequired && experienceScore < 1 ? [`Expérience demandée : ${parsed.experienceRequired}`] : []), ...(parsed.educationRequired && educationScore < 1 ? [`Formation demandée : ${parsed.educationRequired}`] : [])].slice(0, 5);
+  return { percentage, matchingSkills: matchedSkills, missingSkills, strengths, gaps, recommendation: percentage >= 80 ? "Très bon alignement" : percentage >= 60 ? "Alignement intéressant" : percentage >= 40 ? "À renforcer" : "Faible alignement", criteria: { role: parsed.role || null, experience: parsed.experienceRequired || null, education: parsed.educationRequired || null, contract: parsed.contractType || null } };
+}
 const STOP_WORDS = new Set("avec pour dans une des les aux sur par vous votre nous notre cette comme plus sont être avoir poste entreprise expérience travail recherche niveau afin ainsi chez depuis sous entre selon sans très aux du de et ou en le la un une au ce se qui que est".split(" "));
 const SECTION_ALIASES = [
   {name:"EXPÉRIENCE", test:/^(exp[eé]rience|exp[eé]riences|exp[eé]rience professionnelle|parcours professionnel|emploi|professional experience)(?:\s*:)?$/i},
@@ -401,7 +416,7 @@ export async function POST(request: Request) {
         ? adapted
         : [target ? `PROFIL CIBLE\n${target}` : "", "CV SOURCE", cv].filter(Boolean).join("\n\n");
     await recordActivity(user, "cv.adapted", `CV adapté pour ${target || "une offre"} (${provider})`);
-    return Response.json({ ok: true, adaptedCv, structured: modelAdapted?.structured ?? null, matchedSkills, matchedKeywords, targetRole: target, provider, quality: qualityReport(cv, adaptedCv, matchedKeywords), note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
+    return Response.json({ ok: true, adaptedCv, structured: modelAdapted?.structured ?? null, matchedSkills, matchedKeywords, targetRole: target, provider, quality: qualityReport(cv, adaptedCv, matchedKeywords), compatibility: compatibilityReport(cv, offer, parsed, matchedSkills, matchedKeywords), note: "Le contenu est réorganisé et priorisé à partir de votre CV. Vérifiez chaque formulation avant envoi : Fala AI n'invente aucune expérience." });
   } catch (error) {
     try { await logSystemError("/api/cv/adapt", error, user.email); } catch { /* journalisation best-effort */ }
     return Response.json({ error: "Adaptation du CV momentanément indisponible" }, { status: 500 });
