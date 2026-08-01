@@ -363,7 +363,7 @@ export default function Home() {
   const [query,setQuery] = useState("");
   const [filter,setFilter] = useState("Toutes");
   const [view,setView] = useState<"list"|"kanban">("list");
-  const [modal,setModal] = useState<"add"|"profile"|"privacy"|"report"|"import"|"notifications"|null>(null);
+  const [modal,setModalState] = useState<"add"|"profile"|"privacy"|"report"|"import"|"notifications"|null>(null);
   const [parsedOffer,setParsedOffer] = useState<ParsedOffer|null>(null);
   const [offerText,setOfferText] = useState("");
   const [consentAccepted,setConsentAccepted] = useState(false);
@@ -390,6 +390,35 @@ export default function Home() {
   const [prepFeedback,setPrepFeedback] = useState("");
 
   const notify = (message:string) => { setToast(message); window.setTimeout(()=>setToast(""),2600); };
+
+  function resetOfferAnalysis() {
+    setParsedOffer(null);
+    setOfferText("");
+    setCvText("");
+    setCvFileName("");
+    setReadingCv(false);
+    setCvReadProgress(0);
+    setAdaptedCv("");
+    setCompatibility(null);
+    setAdaptingCv(false);
+    setAiDisclosureAccepted(false);
+    setError("");
+  }
+
+  function setModal(next: "add"|"profile"|"privacy"|"report"|"import"|"notifications"|null) {
+    if (next === null && modal === "import") resetOfferAnalysis();
+    setModalState(next);
+  }
+
+  function openOfferAnalysis() {
+    resetOfferAnalysis();
+    setModal("import");
+  }
+
+  function closeOfferAnalysis() {
+    resetOfferAnalysis();
+    setModal(null);
+  }
 
   function openInterviewPrep(application:Application) {
     setInterviewPrepState(application); setPrepMode("guide"); setPrepQuestionIndex(0); setPrepAnswer(""); setPrepFeedback("");
@@ -609,7 +638,7 @@ export default function Home() {
       <header className="topbar">
         <div className="mobile-brand"><span className="brand-mark">F</span> Fala AI</div>
         <label className="search"><span>⌕</span><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Rechercher dans vos candidatures…"/></label>
-        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="notification-button" onClick={()=>setModal("notifications")} aria-label={`${reminders.length} rappels`}>♢{reminders.length>0&&<b>{reminders.length}</b>}</button><button className="primary" onClick={()=>{setAiDisclosureAccepted(false);setModal("import");}}>＋ Ajouter</button><details className="mobile-menu"><summary aria-label="Ouvrir le menu">•••</summary><div><a href="#dashboard">Vue d’ensemble</a><a href="#applications">Candidatures</a><a href="#analytics">Statistiques</a><button onClick={()=>setModal("profile")}>Profil de scoring</button><button onClick={()=>setModal("privacy")}>Mes données</button><button onClick={()=>setModal("report")}>Signaler un problème</button>{isAdmin&&<a href="/admin">Administration</a>}<a href="/api/auth/logout">Se déconnecter</a></div></details></div>
+        <div className="top-actions"><span className="live"><i/>{currentUser.displayName}</span><button className="notification-button" onClick={()=>setModal("notifications")} aria-label={`${reminders.length} rappels`}>♢{reminders.length>0&&<b>{reminders.length}</b>}</button><button className="primary" onClick={openOfferAnalysis}>＋ Ajouter</button><details className="mobile-menu"><summary aria-label="Ouvrir le menu">•••</summary><div><a href="#dashboard">Vue d’ensemble</a><a href="#applications">Candidatures</a><a href="#analytics">Statistiques</a><button onClick={()=>setModal("profile")}>Profil de scoring</button><button onClick={()=>setModal("privacy")}>Mes données</button><button onClick={()=>setModal("report")}>Signaler un problème</button>{isAdmin&&<a href="/admin">Administration</a>}<a href="/api/auth/logout">Se déconnecter</a></div></details></div>
       </header>
 
       <div className="page-wrap">
