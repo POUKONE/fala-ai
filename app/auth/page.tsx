@@ -17,6 +17,8 @@ declare global {
 function AuthPageContent() {
   const params = useSearchParams();
   const requiresFreshAuth = params.get("reauth") === "1";
+  const requestedPath = params.get("next") ?? "/";
+  const nextPath = requestedPath.startsWith("/") && !requestedPath.startsWith("//") ? requestedPath : "/";
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : params.get("mode") === "reset" ? "reset" : "login");
   // Read the token from the current URL on every render. Keeping it in state
   // can leave it empty after the browser hydrates a password-reset link.
@@ -121,7 +123,7 @@ function AuthPageContent() {
         setCaptchaRequired(false); setCaptchaToken("");
         // A full navigation guarantees that the freshly issued HttpOnly
         // session cookie is read by the workspace before rendering it.
-        window.location.replace("/");
+        window.location.replace(nextPath);
       }
     } catch (cause) {
       setError(cause instanceof DOMException && cause.name === "AbortError"

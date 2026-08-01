@@ -10,12 +10,23 @@ type ErrorEvent={id:number;user_email:string|null;route:string;message:string;cr
 type Role={user_email:string;role:string;granted_by:string;created_at:string};
 type Activity={user_email:string;event_type:string;description:string;created_at:string};
 type AdminData={connection:{status:string;source:string;checkedAt:string};summary:{users:number;active7d:number;applications:number;newApplications7d:number};statuses:Array<{status:string;count:number}>;recentUsers:User[];activity:Activity[];reports:Report[];errors:ErrorEvent[];roles:Role[]};
+const TAB_SESSION_KEY="fala_tab_session";
 
 const date=(value:string)=>new Intl.DateTimeFormat("fr-FR",{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));
 
 export default function AdminPage(){
   const [data,setData]=useState<AdminData|null>(null);const [error,setError]=useState("");const [loading,setLoading]=useState(true);const [query,setQuery]=useState("");const [busy,setBusy]=useState("");
-  async function load(){setLoading(true);const response=await csrfFetch("/api/admin/overview",{cache:"no-store"});const body=await response.json();if(!response.ok)setError(body.error??"Accès impossible");else{setData(body);setError("");}setLoading(false);}
+  async function load(){
+    setLoading(true);
+    // Cookies are shared between tabs, so a copied /admin URL must still
+    // establish a fresh authentication context in the new tab before any
+    // administrative data is requested or rendered.
+    if(!window.sessionStorage.getItem(TAB_SESSION_KEY)){
+      window.location.replace(`/auth?reauth=1&next=${encodeURIComponent("/admin")}`);
+      return;
+    }
+    const response=await csrfFetch("/api/admin/overview",{cache:"no-store"});const body=await response.json();if(!response.ok)setError(body.error??"Accès impossible");else{setData(body);setError("");}setLoading(false);
+  }
   useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[]);
   const users=useMemo(()=>data?.recentUsers.filter((user)=>`${user.display_name} ${user.email}`.toLowerCase().includes(query.toLowerCase()))??[],[data,query]);
   const activities=useMemo(()=>data?.activity.filter((item)=>`${item.user_email} ${item.description} ${item.event_type}`.toLowerCase().includes(query.toLowerCase()))??[],[data,query]);
