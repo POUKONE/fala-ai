@@ -18,6 +18,13 @@ function issueToken(response: NextResponse, request: NextRequest) {
 export default function proxy(request: NextRequest) {
   const response = NextResponse.next();
   issueToken(response, request);
+  // Never let a browser restore a stale authenticated workspace after
+  // logout/back navigation. The server APIs remain protected as well, but
+  // this prevents the old HTML shell from being reused by the bfcache.
+  if (request.nextUrl.pathname === "/" || request.nextUrl.pathname === "/admin") {
+    response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.headers.set("Pragma", "no-cache");
+  }
   if (request.nextUrl.pathname.startsWith("/api/") && MUTATING_METHODS.has(request.method)) {
     const cookieToken = request.cookies.get(CSRF_COOKIE)?.value ?? "";
     const headerToken = request.headers.get("x-csrf-token") ?? "";

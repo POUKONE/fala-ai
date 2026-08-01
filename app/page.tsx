@@ -398,6 +398,12 @@ export default function Home() {
   },[]);
 
   useEffect(()=>{ const timer=window.setTimeout(()=>void loadData(),0); return()=>window.clearTimeout(timer); },[loadData]);
+  useEffect(()=>{
+    const revalidateOnRestore = (event: PageTransitionEvent) => { if (event.persisted) void loadData(); };
+    window.addEventListener("pageshow", revalidateOnRestore);
+    window.addEventListener("popstate", revalidateOnRestore);
+    return()=>{ window.removeEventListener("pageshow", revalidateOnRestore); window.removeEventListener("popstate", revalidateOnRestore); };
+  },[loadData]);
   useEffect(()=>{ if (!currentUser) return; const timer=window.setTimeout(()=>void syncNotifications(true),0); const interval=window.setInterval(()=>void syncNotifications(true),60000); return()=>{window.clearTimeout(timer);window.clearInterval(interval);}; },[currentUser]);
 
   async function syncNotifications(showBrowserAlerts = false) {
