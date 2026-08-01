@@ -543,9 +543,11 @@ export default function Home() {
 
   async function markNotificationRead(item:NotificationReminder) {
     if (item.read || !item.notification_id) return;
-    const response = await csrfFetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ action:"read", notificationId:item.notification_id }) });
-    if (!response.ok) return;
     setNotificationReminders((current)=>current.map((candidate)=>candidate.notification_id===item.notification_id?{...candidate,read:true}:candidate));
+    const response = await csrfFetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ action:"read", notificationId:item.notification_id }) });
+    if (!response.ok) {
+      await syncNotifications(false);
+    }
   }
 
   async function enableNotifications() {

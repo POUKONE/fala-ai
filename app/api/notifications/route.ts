@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   await ensureTable();
   const db = getPostgresDb();
   if (body.action === "read" && body.notificationId) {
-    const result = await db.prepare("UPDATE notification_events SET read_at=? WHERE id=? AND user_email=? AND read_at IS NULL")
+    const result = await db.prepare("UPDATE notification_events SET read_at=? WHERE id=? AND user_email=? AND read_at IS NULL RETURNING id")
       .bind(new Date().toISOString(), body.notificationId, user.email).run();
     return Response.json({ ok: true, read: Boolean(result.meta.changes) });
   }
