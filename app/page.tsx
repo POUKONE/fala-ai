@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import JSZip from "jszip";
 
+import { csrfFetch } from "./csrf-client";
 type Application = {
   id:number; company:string; role:string; location:string; contract_type:string; source:string;
   required_skills:string; experience_required:string; education_required:string; languages:string;
@@ -331,12 +332,12 @@ export default function Home() {
   const loadData = useCallback(async () => {
     setError("");
     try {
-      const meResponse = await fetch("/api/me",{cache:"no-store"});
+      const meResponse = await csrfFetch("/api/me",{cache:"no-store"});
       const meData = await meResponse.json();
       setCurrentUser(meData.user ?? null); setIsAdmin(Boolean(meData.isAdmin)); setConsentRequired(Boolean(meData.consentRequired)); setSuspension(meData.suspended?String(meData.suspensionReason||"Compte suspendu"):null); setAuthChecked(true);
       if (!meData.user) { setApplications([]); setProfile(null); setActivity([]); return; }
       if (meData.suspended || meData.consentRequired) { setApplications([]); setProfile(null); setActivity([]); return; }
-      const [appsResponse,profileResponse,activityResponse] = await Promise.all([fetch("/api/applications",{cache:"no-store"}),fetch("/api/profile",{cache:"no-store"}),fetch("/api/activity",{cache:"no-store"})]);
+      const [appsResponse,profileResponse,activityResponse] = await Promise.all([csrfFetch("/api/applications",{cache:"no-store"}),csrfFetch("/api/profile",{cache:"no-store"}),csrfFetch("/api/activity",{cache:"no-store"})]);
       if (!appsResponse.ok || !profileResponse.ok || !activityResponse.ok) throw new Error(appsResponse.status===401?"Votre session a expiré. Reconnectez-vous.":"Impossible de charger vos données.");
       const appsData = await appsResponse.json(); const profileData = await profileResponse.json(); const activityData = await activityResponse.json();
       setApplications(appsData.applications ?? []); setProfile(profileData.profile ?? null); setActivity(activityData.activity ?? []);
@@ -348,7 +349,7 @@ export default function Home() {
   useEffect(()=>{ if (!currentUser) return; const timer=window.setTimeout(()=>void syncNotifications(true),0); const interval=window.setInterval(()=>void syncNotifications(true),60000); return()=>{window.clearTimeout(timer);window.clearInterval(interval);}; },[currentUser]);
 
   async function syncNotifications(showBrowserAlerts = false) {
-    const response = await fetch("/api/notifications", { cache:"no-store" });
+    const response = await csrfFetch("/api/notifications", { cache:"no-store" });
     if (!response.ok) return;
     const data = await response.json() as {enabled?:boolean; reminders?:NotificationReminder[]};
     setNotificationsEnabled(Boolean(data.enabled));
@@ -370,13 +371,13 @@ export default function Home() {
     if (!("Notification" in window)) { notify("Les notifications ne sont pas prises en charge par ce navigateur"); return; }
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
-      await fetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:true}) });
+      await csrfFetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:true}) });
       setNotificationsEnabled(true);
       new Notification("Fala AI — rappels activés", { body: "Vous recevrez les échéances enregistrées dans vos candidatures." });
       notify("Notifications navigateur activées");
       await syncNotifications(true);
     } else {
-      await fetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:false}) });
+      await csrfFetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({enabled:false}) });
       setNotificationsEnabled(false); notify("Autorisation de notifications refusée");
     }
   }
@@ -388,7 +389,7 @@ export default function Home() {
     }
     setAdaptingCv(true); setError(""); setAdaptedCv("");
     try {
-      const response = await fetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
+      const response = await csrfFetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) { setError(body.error ?? "Adaptation du CV impossible"); return; }
       const result = String(body.adaptedCv ?? "").trim();
@@ -416,18 +417,18 @@ export default function Home() {
   const reminders = useMemo(()=>applications.flatMap((application)=>[{type:"Prochaine action",date:application.next_action_at,application},{type:"Entretien",date:application.interview_at,application}]).filter((item)=>item.date).sort((a,b)=>new Date(a.date!).getTime()-new Date(b.date!).getTime()).slice(0,20),[applications]);
   const interviewTarget = useMemo(()=>applications.find((application)=>application.status==="Entretien") ?? applications[0] ?? null,[applications]);
 
-  async function acceptConsent(){setSaving(true);const response=await fetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
+  async function acceptConsent(){setSaving(true);const response=await csrfFetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
 
-  async function analyzeOffer(){setSaving(true);setError("");const response=await fetch("/api/offer/parse",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({text:offerText})});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Analyse impossible");return;}setParsedOffer(body.parsed);setModal("add");notify("Annonce analysée — vérifiez les champs");}
+  async function analyzeOffer(){setSaving(true);setError("");const response=await csrfFetch("/api/offer/parse",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({text:offerText})});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Analyse impossible");return;}setParsedOffer(body.parsed);setModal("add");notify("Annonce analysée — vérifiez les champs");}
 
-  async function submitReport(form:FormData){setSaving(true);const response=await fetch("/api/reports",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(form.entries()))});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Envoi impossible");return;}setModal(null);notify("Signalement transmis à l’administration");}
+  async function submitReport(form:FormData){setSaving(true);const response=await csrfFetch("/api/reports",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(Object.fromEntries(form.entries()))});const body=await response.json();setSaving(false);if(!response.ok){setError(body.error??"Envoi impossible");return;}setModal(null);notify("Signalement transmis à l’administration");}
 
-  async function deleteAccount(){const confirmation=window.prompt("Cette action est irréversible. Saisissez SUPPRIMER pour confirmer.");if(confirmation!=="SUPPRIMER")return;const response=await fetch("/api/account",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({confirmation})});const body=await response.json();if(!response.ok){setError(body.error??"Suppression impossible");return;}window.location.href=body.signOut;}
+  async function deleteAccount(){const confirmation=window.prompt("Cette action est irréversible. Saisissez SUPPRIMER pour confirmer.");if(confirmation!=="SUPPRIMER")return;const response=await csrfFetch("/api/account",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({confirmation})});const body=await response.json();if(!response.ok){setError(body.error??"Suppression impossible");return;}window.location.href=body.signOut;}
 
   async function addApplication(form:FormData) {
     setSaving(true); setError("");
     const payload = Object.fromEntries(form.entries());
-    const response = await fetch("/api/applications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const response = await csrfFetch("/api/applications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const data = await response.json(); setSaving(false);
     if (!response.ok) { setError(data.error??"Ajout impossible"); return; }
     setApplications((current)=>[data.application,...current]); setModal(null); notify("Candidature enregistrée durablement");
@@ -436,11 +437,11 @@ export default function Home() {
   async function saveProfile(form:FormData) {
     setSaving(true); setError("");
     const payload = Object.fromEntries(form.entries());
-    const response = await fetch("/api/profile",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const response = await csrfFetch("/api/profile",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     setSaving(false);
     if (!response.ok) { const data=await response.json(); setError(data.error??"Enregistrement impossible"); return; }
     setProfile({target_title:String(payload.targetTitle||""),location:String(payload.location||""),contract_type:String(payload.contractType||""),skills:String(payload.skills||""),experience_level:String(payload.experienceLevel||""),education_level:String(payload.educationLevel||""),languages:String(payload.languages||""),sectors:String(payload.sectors||""),salary_min:Number(payload.salaryMin||0)});
-    const refreshed = await fetch("/api/applications",{cache:"no-store"});
+    const refreshed = await csrfFetch("/api/applications",{cache:"no-store"});
     if (refreshed.ok) { const body=await refreshed.json(); setApplications(body.applications??[]); }
     setModal(null); notify("Profil enregistré et scores recalculés");
   }
@@ -448,7 +449,7 @@ export default function Home() {
   async function updateApplication(form:FormData) {
     if (!selected) return;
     setSaving(true); const payload=Object.fromEntries(form.entries());
-    const response=await fetch(`/api/applications/${selected.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
+    const response=await csrfFetch(`/api/applications/${selected.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const data=await response.json(); setSaving(false);
     if(!response.ok){setError(data.error??"Mise à jour impossible");return;}
     setApplications((current)=>current.map((a)=>a.id===selected.id?data.application:a)); setSelected(data.application); notify("Candidature mise à jour");
@@ -456,7 +457,7 @@ export default function Home() {
 
   async function removeApplication() {
     if(!selected||!window.confirm(`Supprimer définitivement la candidature ${selected.role} chez ${selected.company} ?`)) return;
-    const response=await fetch(`/api/applications/${selected.id}`,{method:"DELETE"});
+    const response=await csrfFetch(`/api/applications/${selected.id}`,{method:"DELETE"});
     if(!response.ok){setError("Suppression impossible");return;}
     setApplications((current)=>current.filter((a)=>a.id!==selected.id)); setSelected(null); notify("Candidature supprimée");
   }

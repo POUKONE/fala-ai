@@ -4,6 +4,7 @@ import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { csrfFetch } from "../csrf-client";
 type Mode = "login" | "register" | "forgot" | "reset";
 
 declare global {
@@ -66,7 +67,7 @@ function AuthPageContent() {
     const endpoint = mode === "register" ? (signupStep === "email" ? "/api/auth/send-code" : signupStep === "code" ? "/api/auth/verify-code" : "/api/auth/register") : mode === "forgot" ? "/api/auth/forgot" : mode === "reset" ? "/api/auth/reset-password" : "/api/auth/login";
     const body = mode === "register" ? (signupStep === "email" ? { email, displayName: name, consent } : signupStep === "code" ? { email, code: password } : { email, password, displayName: name, consent }) : mode === "reset" ? { token: resetToken, accessToken: supabaseRecoveryToken, password } : { email, password, captchaToken };
     try {
-      const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await csrfFetch(endpoint, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) { setCaptchaRequired(Boolean(data.captchaRequired)); throw new Error(data.error || "Impossible de traiter la demande."); }
       if (mode === "forgot") { setMessage(data.message || "Si cette adresse existe, un lien de récupération a été envoyé."); }

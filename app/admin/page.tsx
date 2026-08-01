@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import { csrfFetch } from "../csrf-client";
 type User={email:string;display_name:string;created_at:string;last_seen_at:string;suspended_at:string|null;suspension_reason:string|null;consented_at:string|null};
 type Report={id:number;user_email:string;category:string;message:string;status:string;admin_note:string;created_at:string;updated_at:string};
 type ErrorEvent={id:number;user_email:string|null;route:string;message:string;created_at:string};
@@ -14,12 +15,12 @@ const date=(value:string)=>new Intl.DateTimeFormat("fr-FR",{dateStyle:"medium",t
 
 export default function AdminPage(){
   const [data,setData]=useState<AdminData|null>(null);const [error,setError]=useState("");const [loading,setLoading]=useState(true);const [query,setQuery]=useState("");const [busy,setBusy]=useState("");
-  async function load(){setLoading(true);const response=await fetch("/api/admin/overview",{cache:"no-store"});const body=await response.json();if(!response.ok)setError(body.error??"Accès impossible");else{setData(body);setError("");}setLoading(false);}
+  async function load(){setLoading(true);const response=await csrfFetch("/api/admin/overview",{cache:"no-store"});const body=await response.json();if(!response.ok)setError(body.error??"Accès impossible");else{setData(body);setError("");}setLoading(false);}
   useEffect(()=>{const timer=window.setTimeout(()=>void load(),0);return()=>window.clearTimeout(timer);},[]);
   const users=useMemo(()=>data?.recentUsers.filter((user)=>`${user.display_name} ${user.email}`.toLowerCase().includes(query.toLowerCase()))??[],[data,query]);
   const activities=useMemo(()=>data?.activity.filter((item)=>`${item.user_email} ${item.description} ${item.event_type}`.toLowerCase().includes(query.toLowerCase()))??[],[data,query]);
-  async function userAction(email:string,action:"suspend"|"reactivate"|"setRole",role?:string){setBusy(email);const reason=action==="suspend"?window.prompt("Motif de suspension :","Examen administratif en cours")??"":undefined;if(action==="suspend"&&!reason){setBusy("");return;}const response=await fetch(`/api/admin/users/${encodeURIComponent(email)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action,role,reason})});const body=await response.json();setBusy("");if(!response.ok){setError(body.error??"Action impossible");return;}await load();}
-  async function updateReport(id:number,status:string){setBusy(`report-${id}`);const response=await fetch(`/api/admin/reports/${id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({status})});const body=await response.json();setBusy("");if(!response.ok){setError(body.error??"Mise à jour impossible");return;}await load();}
+  async function userAction(email:string,action:"suspend"|"reactivate"|"setRole",role?:string){setBusy(email);const reason=action==="suspend"?window.prompt("Motif de suspension :","Examen administratif en cours")??"":undefined;if(action==="suspend"&&!reason){setBusy("");return;}const response=await csrfFetch(`/api/admin/users/${encodeURIComponent(email)}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action,role,reason})});const body=await response.json();setBusy("");if(!response.ok){setError(body.error??"Action impossible");return;}await load();}
+  async function updateReport(id:number,status:string){setBusy(`report-${id}`);const response=await csrfFetch(`/api/admin/reports/${id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({status})});const body=await response.json();setBusy("");if(!response.ok){setError(body.error??"Mise à jour impossible");return;}await load();}
   if(loading&&!data)return <main className="admin-shell"><div className="public-loader"><span className="brand-mark">F</span><p>Chargement du centre de contrôle…</p></div></main>;
   if(error&&!data)return <main className="admin-shell"><div className="admin-denied"><span>!</span><h1>Accès refusé</h1><p>{error}</p><Link href="/">Retour à la plateforme</Link></div></main>;
   if(!data)return null;
