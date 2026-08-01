@@ -461,7 +461,8 @@ export default function Home() {
 
   async function adaptCvToOffer() {
     if (!aiDisclosureAccepted) {
-      setError("Cochez la case de consentement avant de lancer l’adaptation.");
+      const message="Cochez la case de consentement avant de lancer l’adaptation.";
+      setError(message); notify(message);
       return;
     }
     if (offerText.trim().length < 40 || cvText.trim().length < 80) {
@@ -469,19 +470,20 @@ export default function Home() {
         offerText.trim().length < 40 ? "une offre d’au moins 40 caractères" : "",
         cvText.trim().length < 80 ? "un CV lisible d’au moins 80 caractères" : "",
       ].filter(Boolean).join(" et ");
-      setError(`Ajoutez ${missing} avant de lancer la restructuration.`);
+      const message=`Ajoutez ${missing} avant de lancer la restructuration.`;
+      setError(message); notify(message);
       return;
     }
     setAdaptingCv(true); setError(""); setAdaptedCv(""); setCompatibility(null);
     try {
       const response = await csrfFetch("/api/cv/adapt", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ offer:offerText, cv:cvText }) });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) { setError(body.error ?? "Adaptation du CV impossible"); return; }
+      if (!response.ok) { const message=body.error ?? "Adaptation du CV impossible"; setError(message); notify(message); return; }
       const result = String(body.adaptedCv ?? "").trim();
       if (!result) { setError("Aucun contenu n’a été généré. Vérifiez le texte de l’annonce et du CV."); return; }
       setAdaptedCv(result); notify(body.provider === "moteur local" ? "CV restructuré avec le moteur intégré" : "CV restructuré avec l’assistant IA");
       setCompatibility((body.compatibility as CompatibilityReport | undefined) ?? null);
-    } catch { setError("Le service d’analyse est momentanément indisponible. Vérifiez votre connexion puis réessayez."); }
+    } catch { const message="Le service d’analyse est momentanément indisponible. Vérifiez votre connexion puis réessayez."; setError(message); notify(message); }
     finally { setAdaptingCv(false); }
   }
 
