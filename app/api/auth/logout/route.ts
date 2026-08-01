@@ -24,6 +24,7 @@ function cleared(response: Response, request: Request) {
   const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
   response.headers.set("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly${secure}; SameSite=Lax; Max-Age=0`);
   response.headers.set("Cache-Control", "no-store");
+  response.headers.set("Clear-Site-Data", '"cache"');
   return response;
 }
 

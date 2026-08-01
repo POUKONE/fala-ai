@@ -3,6 +3,7 @@ import { getPostgresDb } from "../db/postgres";
 const COOKIE = "fala_session"; const encoder = new TextEncoder();
 function hex(bytes: ArrayBuffer) { return [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
 export async function hashPassword(password: string, salt = crypto.randomUUID()) { const key = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]); const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: encoder.encode(salt), iterations: 120000, hash: "SHA-256" }, key, 256); return `${salt}:${hex(bits)}`; }
+export async function hashOpaqueToken(value: string) { return hex(await crypto.subtle.digest("SHA-256", encoder.encode(value))); }
 export async function verifyPassword(password: string, stored: string) {
   const [salt, expected] = stored.split(":");
   if (!salt || !expected) return false;

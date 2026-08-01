@@ -18,6 +18,10 @@ function issueToken(response: NextResponse, request: NextRequest) {
 export default function proxy(request: NextRequest) {
   const response = NextResponse.next();
   issueToken(response, request);
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  response.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   // Never let a browser restore a stale authenticated workspace after
   // logout/back navigation. The server APIs remain protected as well, but
   // this prevents the old HTML shell from being reused by the bfcache.
@@ -26,6 +30,14 @@ export default function proxy(request: NextRequest) {
     response.headers.set("Pragma", "no-cache");
   }
   if (request.nextUrl.pathname.startsWith("/api/") && MUTATING_METHODS.has(request.method)) {
+    const origin = request.headers.get("origin");
+    const referer = request.headers.get("referer");
+    const requestOrigin = request.nextUrl.origin;
+    let refererOrigin = "";
+    try { refererOrigin = referer ? new URL(referer).origin : ""; } catch { refererOrigin = "invalid"; }
+    if ((origin && origin !== requestOrigin) || (referer && refererOrigin !== requestOrigin)) {
+      return NextResponse.json({ error: "Origine de requête non autorisée." }, { status: 403, headers: { "Cache-Control": "no-store" } });
+    }
     const cookieToken = request.cookies.get(CSRF_COOKIE)?.value ?? "";
     const headerToken = request.headers.get("x-csrf-token") ?? "";
     if (!sameToken(cookieToken, headerToken)) {

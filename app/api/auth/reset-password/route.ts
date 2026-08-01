@@ -1,5 +1,5 @@
 import { getPostgresDb } from "../../../../db/postgres";
-import { hashPassword } from "../../../email-auth";
+import { hashOpaqueToken, hashPassword } from "../../../email-auth";
 import { supabaseUpdatePassword } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     stage = "validation du lien";
     const db = getPostgresDb();
     const user = await db.prepare("SELECT email FROM users WHERE reset_token=? AND reset_token_expires_at>? ")
-      .bind(cleanToken, new Date().toISOString()).first<{ email: string }>();
+      .bind(await hashOpaqueToken(cleanToken), new Date().toISOString()).first<{ email: string }>();
     if (!user) return Response.json({ error: "Ce lien est invalide ou a expiré. Demandez un nouveau lien." }, { status: 400 });
 
     stage = "mise à jour du compte";
