@@ -264,7 +264,14 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
       pages.push(columnText.join("\n\n"));
       onProgress?.(Math.round(10+(pageNumber/document.numPages)*85));
     }
-    text=sanitizeExtractedCvText(pages.join("\n"));
+    const rawPdfText=pages.join("\n");
+    text=sanitizeExtractedCvText(rawPdfText);
+    // Some PDFs use private glyphs or unusual line separators that the
+    // cleanup pass can accidentally remove. Never turn a readable document
+    // into a short CV just because normalization was too aggressive.
+    if(text.trim().length<80 && rawPdfText.trim().length>text.trim().length) {
+      text=rawPdfText.replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim();
+    }
   } catch (error) {
     if(error instanceof Error && /dépasse la limite/.test(error.message)) throw error;
     const raw=new TextDecoder("latin1").decode(bytes);
