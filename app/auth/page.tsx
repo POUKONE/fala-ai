@@ -38,6 +38,22 @@ function AuthPageContent() {
   const captchaSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
 
   useEffect(() => {
+    const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+    const isBackForward = navigation?.type === "back_forward";
+    const signOutAfterBack = () => {
+      window.sessionStorage.removeItem(TAB_SESSION_KEY);
+      // Going back from a workspace to the auth page is an explicit logout.
+      // A normal direct visit (including a copied link in a new tab) does not
+      // invalidate the account session.
+      void csrfFetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    };
+    if (isBackForward) signOutAfterBack();
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) signOutAfterBack(); };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  useEffect(() => {
     if (!captchaRequired || mode !== "login" || !captchaSiteKey || !captchaContainer.current) return;
     const render = () => {
       if (!window.turnstile || !captchaContainer.current || captchaWidget.current) return;
