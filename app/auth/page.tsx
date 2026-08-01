@@ -2,7 +2,7 @@
 
 import { FormEvent, Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 import { csrfFetch } from "../csrf-client";
 type Mode = "login" | "register" | "forgot" | "reset";
@@ -15,7 +15,6 @@ declare global {
 }
 
 function AuthPageContent() {
-  const router = useRouter();
   const params = useSearchParams();
   const [mode, setMode] = useState<Mode>(params.get("mode") === "register" ? "register" : params.get("mode") === "reset" ? "reset" : "login");
   // Read the token from the current URL on every render. Keeping it in state
@@ -79,7 +78,13 @@ function AuthPageContent() {
       else if (mode === "register" && signupStep === "code") { setSignupStep("password"); setPassword(""); setMessage(data.message || "Adresse vérifiée. Choisissez maintenant votre mot de passe."); }
       else if (mode === "register" && data.requiresEmailConfirmation) { setMode("login"); setMessage(data.message || "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter."); }
       else if (mode === "register") { window.sessionStorage.setItem(TAB_SESSION_KEY, "1"); setMode("login"); setSignupStep("email"); setPassword(""); setMessage(data.message || "Votre compte est créé avec succès. Vous pouvez maintenant vous connecter."); }
-      else { window.sessionStorage.setItem(TAB_SESSION_KEY, "1"); setCaptchaRequired(false); setCaptchaToken(""); router.push("/"); router.refresh(); }
+      else {
+        window.sessionStorage.setItem(TAB_SESSION_KEY, "1");
+        setCaptchaRequired(false); setCaptchaToken("");
+        // A full navigation guarantees that the freshly issued HttpOnly
+        // session cookie is read by the workspace before rendering it.
+        window.location.replace("/");
+      }
     } catch (cause) {
       setError(cause instanceof DOMException && cause.name === "AbortError"
         ? "La connexion prend trop de temps. Vérifiez votre réseau puis réessayez."
