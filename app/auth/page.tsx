@@ -91,7 +91,7 @@ function AuthPageContent() {
         <h2>{title}</h2><p className="auth-subtitle">{mode === "forgot" ? "Saisissez votre adresse et nous vous aiderons à retrouver votre compte." : "Utilisez votre adresse e-mail et un mot de passe."}</p>
         {error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}
         <form onSubmit={submit}>
-          {mode === "register" && <label>Nom affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required /></label>}
+          {mode === "register" && <label>Nom complet affiché<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Ex. Ibrahim POUKONE" minLength={2} maxLength={120} required /><small>Ce nom sera visible dans votre espace Fala AI.</small></label>}
           {mode !== "reset" && <label>Adresse e-mail<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>}
           {mode === "register" && signupStep === "code" && <label>Code reçu par e-mail<input inputMode="numeric" pattern="[0-9]{6}" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} maxLength={6} autoComplete="one-time-code" required /><small>Le code est valable 10 minutes</small></label>}
           {mode !== "forgot" && (mode !== "register" || signupStep === "password") && <label>Mot de passe<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === "register" || mode === "reset" ? "new-password" : "current-password"} required /><small>8 caractères minimum</small></label>}
