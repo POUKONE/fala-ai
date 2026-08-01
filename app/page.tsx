@@ -218,10 +218,12 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
   let text="";
   try {
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-    // Utiliser le worker livré avec l'application : le CDN public peut être
-    // bloqué par le navigateur et laisser l'extraction à zéro caractère.
-    if(!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc=new URL("pdfjs-dist/build/pdf.worker.min.mjs",import.meta.url).toString();
-    const pdfOptions={data:bytes,useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+    // PDF.js 6 peut échouer à charger son worker dans certains navigateurs
+    // ou après le chargement depuis Vercel (URL de module différente selon le
+    // bundler). Le traitement sans worker est volontaire ici : les CV sont
+    // limités à 8 pages et cela garantit une lecture fiable sans dépendance
+    // à un chemin d'asset ou à un CDN externe.
+    const pdfOptions={data:bytes,useSystemFonts:true,disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
     const document=await pdfjs.getDocument(pdfOptions).promise;
     if(document.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
     const pages:string[]=[];
@@ -265,7 +267,7 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
     try {
       onProgress?.(15);
       const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-      const options={data:bytes,useSystemFonts:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
+      const options={data:bytes,useSystemFonts:true,disableWorker:true} as unknown as Parameters<typeof pdfjs.getDocument>[0];
       const pdfDocument=await pdfjs.getDocument(options).promise;
       if(pdfDocument.numPages>CV_MAX_PAGES) throw new Error(`Le PDF dépasse la limite de ${CV_MAX_PAGES} pages.`);
       const { createWorker } = await import("tesseract.js");
