@@ -42,6 +42,7 @@ export async function POST(request: Request) {
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
   const ip = getClientIp(request);
+  const userAgent = request.headers.get("user-agent")?.slice(0, 300) ?? undefined;
   if (!/^\S+@\S+\.\S+$/.test(email) || password.length < 8 || password.length > 256) return invalidCredentials();
 
   const fastPreflight = await authPreflight(email, ip);
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
     const now = new Date();
     const sessionToken = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
     const expires = new Date(now.getTime() + 2592000000);
-    const finalized = await finalizeAuth(sessionEmail, ip, displayName, sessionToken, now.toISOString(), expires.toISOString());
+    const finalized = await finalizeAuth(sessionEmail, ip, displayName, sessionToken, now.toISOString(), expires.toISOString(), userAgent);
     if (finalized?.suspended === true) return Response.json({ error: "Compte suspendu" }, { status: 403 });
     if (finalized?.ok === true) {
       const response = Response.json({ ok: true, user: { email: sessionEmail, displayName } });
@@ -114,7 +115,7 @@ export async function POST(request: Request) {
   await db.prepare("UPDATE users SET last_seen_at=? WHERE lower(email)=lower(?)").bind(new Date().toISOString(), sessionEmail).run();
   try { await invalidateSessions(sessionEmail); } catch { /* the new session may still be created if cleanup is unavailable */ }
   await clearLoginFailures(ip === "unknown" ? [email] : [email, `ip:${ip}`]);
-  const session = await createSession(sessionEmail);
+  const session = await createSession(sessionEmail, { userAgent, ip });
   const response = Response.json({ ok: true, user: { email: sessionEmail, displayName: user?.display_name ?? email.split("@")[0] } });
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
   response.headers.set("Cache-Control", "no-store");

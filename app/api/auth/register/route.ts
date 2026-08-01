@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     .bind(email, name, now, now, "supabase", CONSENT_VERSION, now, challenge.verified_at, "verified").run();
   await db.prepare("DELETE FROM signup_challenges WHERE lower(email)=lower(?)").bind(email).run();
   if (!authResult.access_token) return Response.json({ ok: true, requiresEmailConfirmation: true, user: { email, displayName: name }, message: "Votre compte est créé. Confirmez votre adresse e-mail avant de vous connecter." });
-  const session = await createSession(email);
+  const session = await createSession(email, { userAgent: request.headers.get("user-agent")?.slice(0, 300), ip: request.headers.get("x-real-ip") ?? request.headers.get("x-forwarded-for") ?? undefined });
   const response = Response.json({ ok: true, user: { email, displayName: name }, message: "Votre compte Fala AI est créé." });
   response.headers.append("Set-Cookie", `${SESSION_COOKIE}=${session.token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=2592000`);
   return response;

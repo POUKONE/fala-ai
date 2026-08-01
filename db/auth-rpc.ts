@@ -29,6 +29,6 @@ export function authPreflight(email: string, ip: string) {
   return call("fala_auth_preflight", { p_email: email, p_ip: ip });
 }
 
-export function finalizeAuth(email: string, ip: string, displayName: string, token: string, createdAt: string, expiresAt: string) {
-  return call("fala_auth_finalize", { p_email: email, p_ip: ip, p_display_name: displayName, p_token: token, p_created_at: createdAt, p_expires_at: expiresAt });
+export function finalizeAuth(email: string, ip: string, displayName: string, token: string, createdAt: string, expiresAt: string, userAgent?: string) {
+  return call("fala_auth_finalize", { p_email: email, p_ip: ip, p_display_name: displayName, p_token: token, p_created_at: createdAt, p_expires_at: expiresAt, p_user_agent: userAgent ?? null });
 }
