@@ -46,3 +46,13 @@ export async function supabaseUpdatePassword(accessToken: string, password: stri
   const response = await fetch(`${url()}/auth/v1/user`, { method: "PUT", headers: { apikey: key(), authorization: `Bearer ${accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ password }) });
   return response.ok;
 }
+
+export async function supabaseUserEmail(accessToken: string): Promise<string | null> {
+  if (!url() || !key()) return null;
+  try {
+    const response = await fetchWithTimeout(`${url()}/auth/v1/user`, { headers: { apikey: key(), authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) return null;
+    const data = await response.json() as { email?: string };
+    return data.email?.trim().toLowerCase() || null;
+  } catch { return null; }
+}

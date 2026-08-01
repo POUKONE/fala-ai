@@ -1,6 +1,6 @@
 import { getPostgresDb } from "../../../../db/postgres";
-import { hashOpaqueToken, hashPassword } from "../../../email-auth";
-import { supabaseUpdatePassword } from "../../../supabase-auth";
+import { hashOpaqueToken, hashPassword, invalidateSessions } from "../../../email-auth";
+import { supabaseUpdatePassword, supabaseUserEmail } from "../../../supabase-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,8 @@ export async function POST(request: Request) {
     if (cleanAccess) {
       stage = "mise à jour du fournisseur d’authentification";
       if (!(await supabaseUpdatePassword(cleanAccess, cleanPassword))) return Response.json({ error: "Lien de récupération invalide ou expiré. Demandez un nouveau lien." }, { status: 400 });
+      const remoteEmail = await supabaseUserEmail(cleanAccess);
+      if (remoteEmail) try { await invalidateSessions(remoteEmail); } catch (error) { console.error("[Fala AI] local session invalidation failed", error); }
       return Response.json({ ok: true });
     }
     if (!cleanToken) return Response.json({ error: "Lien invalide ou expiré. Demandez un nouveau lien." }, { status: 400 });
