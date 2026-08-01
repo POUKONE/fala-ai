@@ -293,7 +293,10 @@ async function readCvFileInternal(file:File,options?:ReadCvOptions|((progress:nu
       };
       let worker: Awaited<ReturnType<typeof createWorker>> | null = null;
       const ocrPages:string[]=[];
-      const pageCount=Math.min(pdfDocument.numPages, 5);
+      // OCR every page that passed the safety limit. Truncating at five pages
+      // made otherwise valid multi-page CVs silently lose their later
+      // experiences, education and certifications.
+      const pageCount=pdfDocument.numPages;
       try {
         // Les CV sont majoritairement francophones ; l'anglais est un repli
         // pour les documents internationaux ou lorsque le pack français est
