@@ -54,6 +54,14 @@ function titleScore(profile:string,offer:string){
   if(familyMatch)return Math.max(lexical,0.8);
   return lexical;
 }
+function roleRelevance(profileTitle:string,offerTitle:string,profileSkills:unknown,offerSkills:unknown){
+  const titleSimilarity=titleScore(profileTitle,offerTitle);
+  const requiredSkills=overlapRatio(offerSkills,profileSkills);
+  if(!tokens(offerSkills).length)return titleSimilarity;
+  // Les compétences peuvent confirmer une proximité de rôle lorsque les
+  // nomenclatures diffèrent, sans permettre à elles seules un score parfait.
+  return Math.max(titleSimilarity,Math.min(1,titleSimilarity*0.7+requiredSkills*0.3));
+}
 function educationRank(value:unknown){const text=normalize(value);if(!text)return -1;if(text.includes("doctorat"))return 8;if(text==="bac")return 0;const match=text.match(/bac\s*\+\s*(\d+)/);return match?Math.min(8,Number(match[1])):-1;}
 function experienceRank(value:unknown){const text=String(value??"").trim();if(text in EXPERIENCE_RANK)return EXPERIENCE_RANK[text];const match=text.match(/(\d+)/);return match?Number(match[1])>=5?3:Number(match[1])>=3?2:Number(match[1])>=1?1:0:-1;}
 function compareExperience(profile:unknown,required:unknown){const needed=experienceRank(required),available=experienceRank(profile);return needed<0||available<0?1:available>=needed?1:0.6;}
@@ -71,7 +79,7 @@ export function calculateScore(profile:ScoringProfile|null,body:ApplicationInput
   const offerSalary=Math.max(0,Number(valueFrom(body,"salaryMax","salary_min"))||0);
   const raw:Record<CriteriaKey,number>={
     skills:overlapRatio(valueFrom(body,"requiredSkills","required_skills"),profile.skills),
-    title:titleScore(profile.target_title,String(valueFrom(body,"role","role")??"")),
+    title:roleRelevance(profile.target_title,String(valueFrom(body,"role","role")??""),profile.skills,valueFrom(body,"requiredSkills","required_skills")),
     experience:compareExperience(profile.experience_level,valueFrom(body,"experienceRequired","experience_required")),
     location:compareLocation(profile.location,offerLocation,false,offerLocation),
     education:compareEducation(profile.education_level,valueFrom(body,"educationRequired","education_required")),
