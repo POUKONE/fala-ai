@@ -32,6 +32,7 @@ const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Arch
 const TAB_SESSION_KEY = "fala_tab_session";
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
 const sectorSuggestions = ["Tech","Data & IA","Finance","Banque","Assurance","Juridique","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom","Ressources humaines","Hôtellerie","Restauration","Communication","Marketing","Logistique","Aéronautique","Automobile","Construction","Public"];
+const sourceSuggestions = ["LinkedIn","Indeed","France Travail","Welcome to the Jungle","Apec","Glassdoor","HelloWork","JobTeaser","Site de l’entreprise","Réseau professionnel","Salon de recrutement","Recommandation"];
 const languageSuggestions = ["Français","Anglais","Espagnol","Allemand","Italien","Portugais","Arabe","Néerlandais","Chinois","Japonais"];
 const contractSuggestions = ["CDI","CDD","Alternance","Stage","Freelance","Intérim"];
 const locationSuggestions = ["Paris","Lyon","Marseille","Toulouse","Bordeaux","Lille","Nantes","Montpellier","Strasbourg","Nice","Rennes","Grenoble","France","Île-de-France","Télétravail","Hybride"];
@@ -546,10 +547,12 @@ export default function Home() {
     attachSuggestions("sector","fala-sector-suggestions");
     attachSuggestions("sectors","fala-sector-suggestions");
     attachSuggestions("targetTitle","fala-role-suggestions");
+    attachSuggestions("source","fala-source-suggestions");
     document.querySelectorAll<HTMLInputElement>('input[name="languages"]').forEach((input)=>input.setAttribute("list","fala-language-suggestions"));
     document.querySelectorAll<HTMLSelectElement>('.modal[aria-labelledby="profile-title"] select[name="contractType"]').forEach((select)=>{ select.multiple=true; select.size=3; const selectedValues=new Set(String(profile?.contract_type||"").split(/[,;]+/).map((item)=>item.trim()).filter(Boolean)); Array.from(select.options).forEach((option)=>{option.selected=selectedValues.has(option.value);}); });
     const addList = (id:string, values:string[]) => { if(document.getElementById(id)) return; const list=document.createElement("datalist"); list.id=id; values.forEach((value)=>{const option=document.createElement("option"); option.value=value; list.appendChild(option);}); document.body.appendChild(list); };
     addList("fala-role-suggestions",["Développeur","Développeur web","Data Analyst","Data Scientist","Business Analyst","Product Manager","Chef de projet","Consultant","Commercial","Chargé de communication","Ingénieur","Administrateur systèmes","Technicien support","Comptable","Contrôleur de gestion","Assistant administratif","Responsable RH","Juriste","Infirmier","Logisticien","Designer UX/UI"]);
+    addList("fala-source-suggestions",sourceSuggestions);
     addList("fala-language-suggestions",languageSuggestions);
     addList("fala-contract-suggestions",contractSuggestions);
     const offerInput=document.querySelector<HTMLInputElement>('[aria-labelledby="import-title"] .file-picker input');
@@ -701,6 +704,8 @@ export default function Home() {
   async function addApplication(form:FormData) {
     setSaving(true); setError("");
     const payload = Object.fromEntries(form.entries());
+    if (payload.source === "__custom__") payload.source = String(payload.sourceOther ?? "").trim();
+    delete payload.sourceOther;
     const response = await csrfFetch("/api/applications",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     const data = await response.json(); setSaving(false);
     if (!response.ok) { setError(data.error??"Ajout impossible"); return; }
