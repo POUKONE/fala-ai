@@ -95,6 +95,17 @@ function AuthPageContent() {
     setMode(next); setMessage(""); setError(""); if (next === "register") setSignupStep("email");
   }
 
+  function redirectAfterLogin(path: string) {
+    const destination = new URL(path, window.location.origin).toString();
+    // Use a full navigation so the freshly issued HttpOnly cookie is read by
+    // the workspace. The short fallback handles browsers that keep the auth
+    // route mounted after replace() while the server response is completing.
+    window.location.assign(destination);
+    window.setTimeout(() => {
+      if (window.location.pathname === "/auth") window.location.href = destination;
+    }, 700);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (resetExpired) { setError("Ce lien de récupération a expiré. Demandez un nouveau lien."); return; }
@@ -123,7 +134,7 @@ function AuthPageContent() {
         setCaptchaRequired(false); setCaptchaToken("");
         // A full navigation guarantees that the freshly issued HttpOnly
         // session cookie is read by the workspace before rendering it.
-        window.location.replace(nextPath);
+        redirectAfterLogin(nextPath);
       }
     } catch (cause) {
       setError(cause instanceof DOMException && cause.name === "AbortError"
