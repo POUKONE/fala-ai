@@ -30,12 +30,34 @@ const ROLE_ALIASES:Record<string,string> = {
   securite:"cybersecurity", devops:"devops", cloud:"cloud", machine:"machine-learning", learning:"machine-learning",
   intelligence:"ai", artificielle:"ai", ai:"ai", ia:"ai", reseau:"network", réseaux:"network", systeme:"systems", systemes:"systems",
   administrateur:"administrator", administratrice:"administrator", consultant:"consultant", consultante:"consultant",
+  medecin:"doctor", docteur:"doctor", physician:"doctor", generaliste:"general-practitioner",
+  infirmier:"nurse", infirmiere:"nurse", nursing:"nurse", kine:"physiotherapist", kinesitherapeute:"physiotherapist",
+  psychologue:"psychologist", psychotherapist:"psychologist", comptable:"accountant", comptabilite:"accountant", accountant:"accountant",
+  marketing:"marketing", marketeur:"marketing", acheteur:"buyer", achats:"procurement", procurement:"procurement",
+  electricien:"electrician", electricite:"electrician", plombier:"plumber", chauffagiste:"heating", menuisier:"carpenter",
+  mecanicien:"mechanic", automobile:"automotive", graphiste:"graphic-designer", designer:"designer", journaliste:"journalist",
+  reporter:"journalist", monteur:"video-editor", video:"video", architecte:"architect", professeur:"teacher", enseignant:"teacher",
+  chercheur:"researcher", juriste:"jurist", avocat:"lawyer", juridique:"legal", conformite:"compliance",
+  interieur:"interior", interior:"interior", chef:"project-manager", projet:"project-manager", project:"project-manager",
+  manager:"project-manager", coordination:"project-manager", responsable:"responsible",
 };
 const ROLE_FAMILIES = [
   ["developer","engineer","software","fullstack","frontend","backend","web"],
   ["data","analyst","scientist","machine-learning","ai"],
   ["cybersecurity","network","systems","devops","cloud","administrator"],
   ["business","analyst","consultant"],
+  ["doctor","general-practitioner"], ["nurse"], ["physiotherapist"], ["psychologist"],
+  ["accountant"], ["marketing"], ["buyer","procurement"], ["electrician"], ["plumber","heating"],
+  ["carpenter"], ["mechanic","automotive"], ["graphic-designer","designer"], ["journalist"],
+  ["video-editor"], ["architect","interior","designer"], ["teacher"], ["researcher"], ["jurist","lawyer","legal","compliance"],
+  ["project-manager"],
+];
+const ROLE_DOMAIN_FAMILIES = [
+  ["doctor","nurse","physiotherapist","psychologist"],
+  ["accountant","marketing","buyer","procurement","business","consultant"],
+  ["electrician","plumber","heating","carpenter","mechanic","automotive"],
+  ["graphic-designer","journalist","video-editor","architect"],
+  ["teacher","researcher","jurist","lawyer","legal","compliance"],
 ];
 const ROLE_STOP_WORDS = new Set(["senior","junior","lead","principal","alternance","stage","freelance","h/f","f/h","the","and","en","de","du","des"]);
 function roleTokens(value:string){
@@ -52,6 +74,10 @@ function titleScore(profile:string,offer:string){
   // Une famille métier commune signale une proximité sémantique, même sans
   // mot identique (ex. « développeur logiciel » / « software engineer »).
   if(familyMatch)return Math.max(lexical,0.8);
+  const domainMatch=ROLE_DOMAIN_FAMILIES.some((family)=>family.some((term)=>candidate.includes(term))&&family.some((term)=>required.includes(term)));
+  // Deux métiers du même domaine restent proches, mais ne sont pas évalués
+  // comme équivalents (ex. infirmier / psychologue).
+  if(domainMatch)return Math.max(lexical,0.55);
   return lexical;
 }
 function roleRelevance(profileTitle:string,offerTitle:string,profileSkills:unknown,offerSkills:unknown){
