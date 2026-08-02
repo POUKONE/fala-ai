@@ -37,6 +37,11 @@ test("les rappels d'entretien et la relance J+3 sont déterministes", async () =
   );
 });
 
+test("les e-mails cron sont réservés aux rappels d'entretien", async () => {
+  const route = await readFile("app/api/cron/notifications/route.ts", "utf8");
+  assert.match(route, /AND e\.type = 'Entretien'/);
+});
+
 test("le client confirme localement l'état lu et resynchronise en cas d'échec", async () => {
   const page = await read("app/page.tsx");
 

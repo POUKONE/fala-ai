@@ -31,6 +31,7 @@ export async function GET(request: Request) {
     FROM notification_events e JOIN users u ON u.email=e.user_email
     JOIN notification_preferences p ON p.user_email=e.user_email AND p.enabled=TRUE
     WHERE e.due_at <= CURRENT_TIMESTAMP AND e.due_at >= (CURRENT_TIMESTAMP - INTERVAL '1 day')
+      AND e.type = 'Entretien'
       AND e.email_sent_at IS NULL ORDER BY e.due_at ASC LIMIT 100`).all<Record<string, unknown>>();
   let sent = 0;
   for (const item of due.results) {
