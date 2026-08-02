@@ -10,7 +10,7 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/rendered-html.test.mjs tests/migrations.test.mjs tests/error-sanitization.test.mjs tests/data-isolation.test.mjs tests/notifications.test.mjs",
     "test:cv-cases": "node --test tests/cv-cases.test.mjs",
     "test:cv-benchmark": "node --test tests/cv-benchmark.test.mjs",
     "test:cv-real": "node --test tests/cv-real-corpus.test.mjs",
