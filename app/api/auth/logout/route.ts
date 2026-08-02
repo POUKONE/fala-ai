@@ -29,12 +29,12 @@ function cleared(response: Response, request: Request) {
 }
 
 export async function POST(request: Request) {
-  await clearSession();
+  void clearSession();
   return cleared(Response.json({ ok: true }), request);
 }
 
 export async function GET(request: Request) {
-  await clearSession();
+  void clearSession();
   const target = new URL(request.url).searchParams.get("return_to") || "/auth";
   const safe = target.startsWith("/") && !target.startsWith("//") ? target : "/auth";
   return cleared(new Response(null, {

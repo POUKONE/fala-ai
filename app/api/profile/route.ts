@@ -23,6 +23,10 @@ export async function PUT(request: Request) {
   const email = user.email;
   const body = await request.json() as Record<string, unknown>;
   const value = (key: string) => String(body[key] ?? "").trim();
+  const listValue = (key: string, maximum: number) => Array.from(new Set(value(key).split(/[,;\n]+/).map((item) => item.trim()).filter(Boolean))).slice(0, maximum).join(", ");
+  const targetTitle = listValue("targetTitle", 3);
+  const contractType = listValue("contractType", 3);
+  const sectors = listValue("sectors", 5);
   const salaryMin = Math.max(0, Number(body.salaryMin ?? 0) || 0);
   const now = new Date().toISOString();
   await getPostgresDb().prepare(`INSERT INTO profiles
@@ -32,11 +36,11 @@ export async function PUT(request: Request) {
     contract_type=excluded.contract_type,skills=excluded.skills,experience_level=excluded.experience_level,
     education_level=excluded.education_level,languages=excluded.languages,sectors=excluded.sectors,
     salary_min=excluded.salary_min,updated_at=excluded.updated_at`)
-    .bind(email,value("targetTitle"),value("location"),value("contractType"),value("skills"),value("experienceLevel"),value("educationLevel"),value("languages"),value("sectors"),salaryMin,now).run();
+    .bind(email,targetTitle,value("location"),contractType,value("skills"),value("experienceLevel"),value("educationLevel"),value("languages"),sectors,salaryMin,now).run();
   const profile: ScoringProfile = {
-    target_title:value("targetTitle"), location:value("location"), contract_type:value("contractType"),
+    target_title:targetTitle, location:value("location"), contract_type:contractType,
     skills:value("skills"), experience_level:value("experienceLevel"), education_level:value("educationLevel"),
-    languages:value("languages"), sectors:value("sectors"), salary_min:salaryMin,
+    languages:value("languages"), sectors, salary_min:salaryMin,
   };
   const existing = await getPostgresDb().prepare("SELECT * FROM applications WHERE user_email = ?").bind(email).all<Record<string, unknown>>();
   if (existing.results.length) {

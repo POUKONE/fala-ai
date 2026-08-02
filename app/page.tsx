@@ -28,6 +28,8 @@ const statuses = ["À préparer","Envoyée","Entretien","Offre","Refusée","Arch
 const TAB_SESSION_KEY = "fala_tab_session";
 const educationLevels = ["Bac","Bac+1","Bac+2","Bac+3","Bac+4","Bac+5","Bac+6","Bac+7","Bac+8 et plus"];
 const sectorSuggestions = ["Tech","Data & IA","Finance","Banque","Assurance","Juridique","Santé","Industrie","Énergie","Retail","E-commerce","Conseil","Éducation","Transport","Immobilier","Télécom","Ressources humaines","Hôtellerie","Restauration","Communication","Marketing","Logistique","Aéronautique","Automobile","Construction","Public"];
+const languageSuggestions = ["Français","Anglais","Espagnol","Allemand","Italien","Portugais","Arabe","Néerlandais","Chinois","Japonais"];
+const contractSuggestions = ["CDI","CDD","Alternance","Stage","Freelance","Intérim"];
 const locationSuggestions = ["Paris","Lyon","Marseille","Toulouse","Bordeaux","Lille","Nantes","Montpellier","Strasbourg","Nice","Rennes","Grenoble","France","Île-de-France","Télétravail","Hybride"];
 const scoreMaximums:Record<string,number> = {skills:35,title:15,experience:15,location:10,education:10,contract:5,languages:5,salary:5};
 const scoreNames:Record<string,string> = {skills:"Compétences",title:"Intitulé du poste",experience:"Expérience",education:"Études",location:"Localisation",contract:"Contrat",languages:"Langues",sector:"Secteur",salary:"Salaire"};
@@ -526,9 +528,18 @@ export default function Home() {
   useEffect(()=>{ if (modal === "notifications" && currentUser) void syncNotifications(false); },[modal,currentUser]);
   useEffect(()=>{
     const attachSuggestions = (field:string,listId:string) => document.querySelectorAll<HTMLInputElement>(`input[name="${field}"]`).forEach((input)=>input.setAttribute("list",listId));
+    const importDescription=document.querySelector<HTMLElement>('.modal[aria-labelledby="import-title"] > p');
+    if(importDescription) importDescription.textContent="Ajoutez une candidature manuellement avec les informations de l’offre, ou collez/importez son texte pour extraire automatiquement les champs. Le CV est facultatif à cette étape.";
     attachSuggestions("location","fala-location-suggestions");
     attachSuggestions("sector","fala-sector-suggestions");
     attachSuggestions("sectors","fala-sector-suggestions");
+    attachSuggestions("targetTitle","fala-role-suggestions");
+    document.querySelectorAll<HTMLInputElement>('input[name="languages"]').forEach((input)=>input.setAttribute("list","fala-language-suggestions"));
+    document.querySelectorAll<HTMLSelectElement>('.modal[aria-labelledby="profile-title"] select[name="contractType"]').forEach((select)=>{ select.multiple=true; select.size=3; const selectedValues=new Set(String(profile?.contract_type||"").split(/[,;]+/).map((item)=>item.trim()).filter(Boolean)); Array.from(select.options).forEach((option)=>{option.selected=selectedValues.has(option.value);}); });
+    const addList = (id:string, values:string[]) => { if(document.getElementById(id)) return; const list=document.createElement("datalist"); list.id=id; values.forEach((value)=>{const option=document.createElement("option"); option.value=value; list.appendChild(option);}); document.body.appendChild(list); };
+    addList("fala-role-suggestions",["Développeur","Data Analyst","Business Analyst","Chef de projet","Commercial","Chargé de communication","Ingénieur","Assistant administratif"]);
+    addList("fala-language-suggestions",languageSuggestions);
+    addList("fala-contract-suggestions",contractSuggestions);
     const offerInput=document.querySelector<HTMLInputElement>('[aria-labelledby="import-title"] .file-picker input');
     if(!offerInput)return;
     offerInput.accept=".pdf,.docx,.txt,.md,.csv,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv";
@@ -546,7 +557,7 @@ export default function Home() {
     };
     offerInput.addEventListener("change",handleOfferFile);
     return()=>offerInput.removeEventListener("change",handleOfferFile);
-  },[modal]);
+  },[modal,profile]);
   useEffect(()=>{ if (modal !== "privacy" || !currentUser) return; setSessionsLoading(true); void csrfFetch("/api/account/sessions",{cache:"no-store"}).then(async(response)=>{const body=await response.json().catch(()=>({}));if(response.ok)setSessions(body.sessions??[]);}).finally(()=>setSessionsLoading(false)); },[modal,currentUser]);
 
   async function syncNotifications(showBrowserAlerts = false) {
@@ -648,7 +659,7 @@ export default function Home() {
   const notificationWindow = (date:string|null) => { if (!date) return false; const timestamp = new Date(date).getTime(); return Number.isFinite(timestamp) && timestamp >= Date.now() - 86400000 && timestamp <= Date.now() + 7 * 86400000; };
   const fallbackReminders = reminders.filter((item)=>notificationWindow(item.date)).map((item)=>({id:item.application.id,notification_id:`${item.application.id}:${item.type==="Entretien"?"interview":"next-action"}`,type:item.type,date:item.date!,company:item.application.company,role:item.application.role,status:item.application.status,read:false}));
   const unreadReminderCount = notificationReminders.filter((item)=>!item.read).length;
-  const interviewTarget = useMemo(()=>applications.find((application)=>application.status==="Entretien") ?? applications[0] ?? null,[applications]);
+  const interviewTarget = useMemo(()=>selected?.status==="Entretien" ? selected : applications.find((application)=>application.status==="Entretien") ?? applications[0] ?? null,[applications,selected]);
 
   async function acceptConsent(){setSaving(true);const response=await csrfFetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
 
@@ -671,6 +682,8 @@ export default function Home() {
   async function saveProfile(form:FormData) {
     setSaving(true); setError("");
     const payload = Object.fromEntries(form.entries());
+    const capList = (key:string, maximum:number) => String(payload[key]||"").split(/[,;\n]+/).map((item)=>item.trim()).filter(Boolean).filter((item,index,array)=>array.indexOf(item)===index).slice(0,maximum).join(", ");
+    payload.targetTitle = capList("targetTitle",3); payload.contractType = form.getAll("contractType").map((item)=>String(item).trim()).filter(Boolean).slice(0,3).join(", ") || capList("contractType",3); payload.sectors = capList("sectors",5);
     const response = await csrfFetch("/api/profile",{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
     setSaving(false);
     if (!response.ok) { const data=await response.json(); setError(data.error??"Enregistrement impossible"); return; }
