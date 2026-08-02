@@ -48,8 +48,21 @@ test("les lectures de profil, activité, notifications et exports sont cloisonn�
   assert.match(activity, /activity_events WHERE user_email\s*=\s*\?/i);
   assert.match(notifications, /notification_preferences WHERE user_email=\?/i);
   assert.match(notifications, /FROM applications WHERE user_email=\?/i);
-  assert.match(accountExport, /profiles WHERE user_email=\?/i);
-  assert.match(accountExport, /applications WHERE user_email=\?/i);
-  assert.match(accountExport, /activity_events WHERE user_email=\?/i);
-  assert.match(accountExport, /reports WHERE user_email=\?/i);
+  assert.match(accountExport, /FROM applications WHERE user_email=\?/i);
+});
+
+test("les suppressions utilisateur ne peuvent cibler que la session authentifiée", async () => {
+  const account = await readRoute("app/api/account/route.ts");
+  const application = await readRoute("app/api/applications/[id]/route.ts");
+
+  assert.match(account, /const user = await getChatGPTUser\(\)/);
+  for (const table of ["applications", "profiles", "activity_events", "reports", "system_errors", "user_roles"]) {
+    assert.match(account, new RegExp(`DELETE FROM ${table} WHERE user_email=\\?`, "i"));
+  }
+  assert.match(account, /DELETE FROM users WHERE email=\?/i);
+  assert.match(account, /DELETE FROM rate_limits WHERE key LIKE \?/i);
+  assert.doesNotMatch(account, /body\.(?:email|userEmail)/i);
+
+  assert.match(application, /DELETE FROM applications WHERE id = \? AND user_email = \?/i);
+  assert.match(application, /SELECT \* FROM applications WHERE id = \? AND user_email = \?/i);
 });
