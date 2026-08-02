@@ -27,6 +27,8 @@ export async function PUT(request: Request) {
   const targetTitle = listValue("targetTitle", 3);
   const contractType = listValue("contractType", 3);
   const sectors = listValue("sectors", 5);
+  if (!targetTitle) return Response.json({ error: "Saisissez au moins un poste recherché." }, { status: 400 });
+  if (!contractType) return Response.json({ error: "Sélectionnez au moins un type de contrat." }, { status: 400 });
   const salaryMin = Math.max(0, Number(body.salaryMin ?? 0) || 0);
   const now = new Date().toISOString();
   await getPostgresDb().prepare(`INSERT INTO profiles
