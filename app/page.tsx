@@ -397,7 +397,7 @@ export default function Home() {
   const [query,setQuery] = useState("");
   const [filter,setFilter] = useState("Toutes");
   const [view,setView] = useState<"list"|"kanban">("list");
-  const [modal,setModalState] = useState<"add"|"profile"|"privacy"|"report"|"import"|"notifications"|null>(null);
+  const [modal,setModalState] = useState<"choose"|"add"|"profile"|"privacy"|"report"|"import"|"notifications"|null>(null);
   const [parsedOffer,setParsedOffer] = useState<ParsedOffer|null>(null);
   const [offerText,setOfferText] = useState("");
   const [consentAccepted,setConsentAccepted] = useState(false);
@@ -439,14 +439,14 @@ export default function Home() {
     setError("");
   }
 
-  function setModal(next: "add"|"profile"|"privacy"|"report"|"import"|"notifications"|null) {
+  function setModal(next: "choose"|"add"|"profile"|"privacy"|"report"|"import"|"notifications"|null) {
     if (next === null && modal === "import") resetOfferAnalysis();
     setModalState(next);
   }
 
   function openOfferAnalysis() {
     resetOfferAnalysis();
-    setModal("import");
+    setModal("choose");
   }
 
   function closeOfferAnalysis() {
@@ -721,6 +721,8 @@ export default function Home() {
   if(suspension)return <main className="account-state"><span className="brand-mark">F</span><h1>Compte suspendu</h1><p>{suspension}</p><p>Vous pouvez demander un examen à l’administrateur : ibrahimapoukone@gmail.com.</p><a href="/api/auth/logout">Se déconnecter</a></main>;
 
   if(consentRequired)return <main className="consent-shell"><section className="consent-card"><span className="brand-mark">F</span><p className="eyebrow">PROTECTION DE VOS DONNÉES</p><h1>Bienvenue dans votre espace Fala AI</h1><p>Pour activer votre espace personnel, confirmez que vous avez lu la politique de confidentialité et les conditions d’utilisation. Vos candidatures restent privées et vous pourrez exporter ou supprimer vos données à tout moment.</p><label className="consent-check"><input type="checkbox" checked={consentAccepted} onChange={(event)=>setConsentAccepted(event.target.checked)}/>J’accepte le traitement de mes données pour fournir le service Fala AI.</label><div><a href="/privacy" target="_blank">Politique de confidentialité</a><a href="/terms" target="_blank">Conditions d’utilisation</a></div><button className="primary" disabled={!consentAccepted||saving} onClick={()=>void acceptConsent()}>{saving?"Activation…":"Activer mon espace"}</button><a href="/api/auth/logout">Refuser et se déconnecter</a></section></main>;
+
+  if(modal==="choose") return <main className="app-shell"><div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div><div className="modal-backdrop"><section className="modal wide-modal add-choice-modal" role="dialog" aria-modal="true" aria-labelledby="add-choice-title"><button className="modal-close" onClick={()=>setModal(null)} aria-label="Fermer">×</button><span className="modal-icon">＋</span><h2 id="add-choice-title">Ajouter une candidature</h2><p>Choisissez le parcours adapté à votre besoin.</p><div className="add-choice-grid"><button type="button" className="add-choice-card" onClick={()=>setModal("add")}><strong>Ajouter manuellement</strong><span>Renseignez l’entreprise, le poste, le statut, la localisation et les échéances. Aucun CV n’est nécessaire.</span><b>Remplir le formulaire →</b></button><button type="button" className="add-choice-card featured" onClick={()=>setModal("import")}><strong>Ajouter et analyser</strong><span>Collez ou importez le texte de l’offre : Fala AI extrait les informations et peut ensuite analyser votre CV.</span><b>Analyser une offre →</b></button></div></section></div></main>;
 
   return <main className="app-shell">
     <datalist id="fala-location-suggestions">{locationSuggestions.map((location)=><option key={location} value={location}/>)}</datalist>
