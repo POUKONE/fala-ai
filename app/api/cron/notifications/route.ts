@@ -13,10 +13,14 @@ async function ensureTable() {
   const db = getPostgresDb();
   await db.prepare(`CREATE TABLE IF NOT EXISTS notification_events (
     id TEXT PRIMARY KEY, user_email TEXT NOT NULL, application_id BIGINT NOT NULL,
-    type TEXT NOT NULL, due_at TEXT NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL,
-    status TEXT NOT NULL, read_at TEXT, created_at TEXT NOT NULL, email_sent_at TEXT
+    type TEXT NOT NULL, due_at TIMESTAMPTZ NOT NULL, company TEXT NOT NULL, role TEXT NOT NULL,
+    status TEXT NOT NULL, read_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL, email_sent_at TIMESTAMPTZ
   )`).run();
+  await db.prepare("ALTER TABLE notification_events ALTER COLUMN due_at TYPE TIMESTAMPTZ USING due_at::timestamptz").run();
+  await db.prepare("ALTER TABLE notification_events ALTER COLUMN created_at TYPE TIMESTAMPTZ USING created_at::timestamptz").run();
+  await db.prepare("ALTER TABLE notification_events ALTER COLUMN read_at TYPE TIMESTAMPTZ USING read_at::timestamptz").run();
   await db.prepare("ALTER TABLE notification_events ADD COLUMN IF NOT EXISTS email_sent_at TEXT").run();
+  await db.prepare("ALTER TABLE notification_events ALTER COLUMN email_sent_at TYPE TIMESTAMPTZ USING email_sent_at::timestamptz").run();
 }
 
 export async function GET(request: Request) {
