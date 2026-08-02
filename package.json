@@ -14,36 +14,40 @@
     "test:cv-cases": "node --test tests/cv-cases.test.mjs",
     "test:cv-benchmark": "node --test tests/cv-benchmark.test.mjs",
     "test:cv-real": "node --test tests/cv-real-corpus.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
     "jszip": "^3.10.1",
-    "next": "16.2.6",
+    "next": "^16.2.12",
     "pdfjs-dist": "^6.2.108",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "1.37.1",
+    "@cloudflare/vite-plugin": "^1.50.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
-    "drizzle-kit": "0.31.10",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "nitro": "^3.0.260610-beta",
-    "react-server-dom-webpack": "19.2.6",
+    "react-server-dom-webpack": "^19.2.8",
     "tailwindcss": "4.2.1",
     "typescript": "5.9.3",
     "vinext": "0.0.50",
-    "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "vite": "^8.2.0",
+    "wrangler": "^4.118.0"
+  },
+  "overrides": {
+    "postcss": "8.5.25",
+    "next": {
+      "sharp": "0.35.3"
+    }
   },
   "type": "module"
 }
