@@ -21,8 +21,10 @@ async function ensureTable() {
     role TEXT NOT NULL,
     status TEXT NOT NULL,
     read_at TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    email_sent_at TEXT
   )`).run();
+  await db.prepare("ALTER TABLE notification_events ADD COLUMN IF NOT EXISTS email_sent_at TEXT").run();
 }
 
 export async function GET() {
