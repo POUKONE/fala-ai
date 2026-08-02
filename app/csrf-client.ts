@@ -6,8 +6,8 @@ function tokenFromCookie() {
 
 export function csrfFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const method = String(init.method ?? "GET").toUpperCase();
-  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return fetch(input, init);
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return fetch(input, { ...init, credentials: init.credentials ?? "include" });
   const headers = new Headers(init.headers);
   headers.set("x-csrf-token", tokenFromCookie());
-  return fetch(input, { ...init, headers });
+  return fetch(input, { ...init, credentials: init.credentials ?? "include", headers });
 }
