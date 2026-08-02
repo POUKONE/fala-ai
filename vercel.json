@@ -3,5 +3,5 @@
   "framework": "nitro",
   "outputDirectory": ".output",
   "installCommand": "npm install",
-  "crons": [{ "path": "/api/cron/notifications", "schedule": "0 * * * *" }]
+  "crons": [{ "path": "/api/cron/notifications", "schedule": "0 7 * * *" }]
 }
