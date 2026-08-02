@@ -528,7 +528,9 @@ export default function Home() {
     if (!response.ok) return;
     const data = await response.json() as {enabled?:boolean; reminders?:NotificationReminder[]};
     setNotificationsEnabled(Boolean(data.enabled));
-    const next = data.reminders ?? [];
+    const readStorageKey = `fala-read-notifications-${currentUser?.email ?? "user"}`;
+    const readIds = new Set(JSON.parse(window.localStorage.getItem(readStorageKey) ?? "[]") as string[]);
+    const next = (data.reminders ?? []).map((item)=>({ ...item, read: Boolean(item.read) || Boolean(item.notification_id && readIds.has(item.notification_id)) }));
     setNotificationReminders(next);
     if (!showBrowserAlerts || !data.enabled || !("Notification" in window) || Notification.permission !== "granted") return;
     const storageKey = `fala-notified-${currentUser?.email ?? "user"}`;
@@ -547,6 +549,12 @@ export default function Home() {
     setNotificationReminders((current)=>current.map((candidate)=>candidate.notification_id===item.notification_id?{...candidate,read:true}:candidate));
     const response = await csrfFetch("/api/notifications", { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({ action:"read", notificationId:item.notification_id }) });
     const result = await response.json().catch(()=>({read:false})) as {read?:boolean};
+    if (result.read === true) {
+      const key = `fala-read-notifications-${currentUser?.email ?? "user"}`;
+      const ids = new Set(JSON.parse(window.localStorage.getItem(key) ?? "[]") as string[]);
+      ids.add(item.notification_id);
+      window.localStorage.setItem(key, JSON.stringify([...ids].slice(-200)));
+    }
     if (!response.ok || result.read !== true) {
       await syncNotifications(false);
     }

@@ -51,4 +51,6 @@ test("le client confirme localement l'état lu et resynchronise en cas d'échec"
   assert.match(page, /action:\"read\", notificationId:item\.notification_id/);
   assert.match(page, /if \(!response\.ok \|\| result\.read !== true\) \{[\s\S]*await syncNotifications\(false\)/);
   assert.match(page, /item\.read\?" · Lu":" · Nouveau"/);
+  assert.match(page, /fala-read-notifications-/);
+  assert.match(page, /localStorage\.setItem\(key, JSON\.stringify/);
 });
