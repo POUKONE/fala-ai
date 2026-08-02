@@ -422,6 +422,7 @@ export default function Home() {
   const [prepQuestionIndex,setPrepQuestionIndex] = useState(0);
   const [prepAnswer,setPrepAnswer] = useState("");
   const [prepFeedback,setPrepFeedback] = useState("");
+  const [interviewChoiceOpen,setInterviewChoiceOpen] = useState(false);
   const [profileTitles,setProfileTitles] = useState<string[]>(["","",""]);
   const [profileContracts,setProfileContracts] = useState<string[]>([]);
   const [profileSectors,setProfileSectors] = useState<string[]>(["","","","",""]);
@@ -462,6 +463,7 @@ export default function Home() {
     setInterviewPrepState(application); setPrepMode("guide"); setPrepQuestionIndex(0); setPrepAnswer(""); setPrepFeedback("");
   }
   function setInterviewPrep(application:Application|null) {
+    if (application && !selected && interviewApplications.length > 1) { setInterviewChoiceOpen(true); return; }
     if (application) openInterviewPrep(application); else setInterviewPrepState(null);
   }
 
@@ -670,6 +672,13 @@ export default function Home() {
   const fallbackReminders = reminders.filter((item)=>notificationWindow(item.date)).map((item)=>({id:item.application.id,notification_id:`${item.application.id}:${item.type==="Entretien"?"interview":"next-action"}`,type:item.type,date:item.date!,company:item.application.company,role:item.application.role,status:item.application.status,read:false}));
   const unreadReminderCount = notificationReminders.filter((item)=>!item.read).length;
   const interviewTarget = useMemo(()=>selected?.status==="Entretien" ? selected : applications.find((application)=>application.status==="Entretien") ?? null,[applications,selected]);
+  const interviewApplications = useMemo(()=>applications.filter((application)=>application.status==="Entretien"),[applications]);
+
+  function launchInterviewCoach() {
+    if (interviewApplications.length === 0) { notify("Ajoutez une candidature au statut Entretien"); return; }
+    if (interviewApplications.length === 1) { setInterviewPrep(interviewApplications[0]); return; }
+    setInterviewChoiceOpen(true);
+  }
 
   async function acceptConsent(){setSaving(true);const response=await csrfFetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
 
@@ -739,6 +748,7 @@ export default function Home() {
   return <main className="app-shell">
     <datalist id="fala-location-suggestions">{locationSuggestions.map((location)=><option key={location} value={location}/>)}</datalist>
     <datalist id="fala-sector-suggestions">{sectorSuggestions.map((sector)=><option key={sector} value={sector}/>)}</datalist>
+    {interviewChoiceOpen&&<div className="modal-backdrop" onMouseDown={()=>setInterviewChoiceOpen(false)}><section className="modal wide-modal" role="dialog" aria-modal="true" aria-labelledby="interview-choice-title" onMouseDown={(event)=>event.stopPropagation()}><button className="modal-close" onClick={()=>setInterviewChoiceOpen(false)} aria-label="Fermer">×</button><span className="modal-icon">◎</span><h2 id="interview-choice-title">Quel entretien préparer ?</h2><p>Plusieurs candidatures sont au statut « Entretien ». Choisissez l’offre à travailler avec le coach.</p><div className="interview-choice-list">{interviewApplications.map((application)=><button type="button" className="interview-choice" key={application.id} onClick={()=>{setInterviewChoiceOpen(false);openInterviewPrep(application);}}><strong>{application.role}</strong><span>{application.company}{application.location?` · ${application.location}`:""}</span><small>{application.interview_at?formatDate(application.interview_at):"Entretien à préparer"}</small></button>)}</div></section></div>}
     <div className="neural-field" aria-hidden="true"><i/><i/><i/><i/><i/></div>
     <aside className="sidebar">
       <div className="brand"><span className="brand-mark">F</span><span>Fala <b>AI</b></span></div>
