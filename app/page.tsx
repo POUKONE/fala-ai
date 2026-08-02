@@ -667,11 +667,12 @@ export default function Home() {
     return matchesQuery && (filter==="Toutes"||item.status===filter);
   }),[applications,query,filter]);
 
+  const statusKey = (value:string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
   const metrics = useMemo(()=>({
-    active:applications.filter((a)=>!["Refusée","Archivée"].includes(a.status)).length,
-    sent:applications.filter((a)=>["Envoyée","Entretien","Offre","Refusée"].includes(a.status)).length,
-    interviews:applications.filter((a)=>a.status==="Entretien").length,
-    offers:applications.filter((a)=>a.status==="Offre").length,
+    active:applications.filter((a)=>!['refusee','archivee'].includes(statusKey(a.status))).length,
+    sent:applications.filter((a)=>['envoyee','entretien','offre','offre recue','offres recues','refusee'].includes(statusKey(a.status))).length,
+    interviews:applications.filter((a)=>statusKey(a.status)==='entretien').length,
+    offers:applications.filter((a)=>['offre','offre recue','offres recues'].includes(statusKey(a.status))).length,
   }),[applications]);
   const responseRate = metrics.sent ? Math.round(applications.filter((a)=>["Entretien","Offre","Refusée"].includes(a.status)).length/metrics.sent*100) : 0;
   const interviewRate = metrics.sent ? Math.round(metrics.interviews/metrics.sent*100) : 0;
