@@ -28,7 +28,7 @@ function compareExperience(profile:unknown,required:unknown){const needed=experi
 function compareEducation(profile:unknown,required:unknown){const needed=educationRank(required),available=educationRank(profile);return needed<0||available<0?1:available>=needed?1:0;}
 function compareLocation(profile:unknown,offer:unknown,relocate=false,remotePolicy:string=""){const a=normalize(profile),b=normalize(offer);if(!a||!b||remotePolicy==="full"||b.includes("remote")||b.includes("teletravail")||relocate)return 1;return a.includes(b)||b.includes(a)?1:0.35;}
 function compareContract(profile:unknown,offer:unknown){const a=tokens(profile),b=tokens(offer);if(!a.length||!b.length)return 1;return a.some((candidate)=>b.some((wanted)=>candidate===wanted||candidate.includes(wanted)||wanted.includes(candidate)))?1:0.4;}
-function compareLanguages(profile:unknown,offer:unknown){return overlapRatio(profile,offer);}
+function compareLanguages(profile:unknown,offer:unknown){const candidate=tokens(profile),required=tokens(offer);if(!candidate.length||!required.length)return 1;return required.some((wanted)=>candidate.some((available)=>available===wanted||available.includes(wanted)||wanted.includes(available)))?1:0;}
 function compareSalary(candidateMin:number,offerMax:number){if(!candidateMin||!offerMax)return 1;if(candidateMin<=offerMax)return 1;const gap=(candidateMin-offerMax)/offerMax;return gap<=0.1?0.5:0.3;}
 function formatBreakdown(raw:Record<CriteriaKey,number>):Breakdown{return Object.fromEntries(Object.entries(SCORE_WEIGHTS).map(([key,weight])=>{const value=Math.max(0,Math.min(1,raw[key as CriteriaKey]??0));return [key,{rawScore:Math.round(value*100),weightedScore:Number((value*weight).toFixed(2))}];})) as Breakdown;}
 function emptyBreakdown(){return formatBreakdown({skills:0,title:0,experience:0,location:0,education:0,contract:0,languages:0,salary:0});}
@@ -38,7 +38,7 @@ export function calculateScore(profile:ScoringProfile|null,body:ApplicationInput
   const offerLocation=String(valueFrom(body,"location","location")??"");
   const offerSalary=Math.max(0,Number(valueFrom(body,"salaryMax","salary_min"))||0);
   const raw:Record<CriteriaKey,number>={
-    skills:overlapRatio(profile.skills,valueFrom(body,"requiredSkills","required_skills")),
+    skills:overlapRatio(valueFrom(body,"requiredSkills","required_skills"),profile.skills),
     title:titleScore(profile.target_title,String(valueFrom(body,"role","role")??"")),
     experience:compareExperience(profile.experience_level,valueFrom(body,"experienceRequired","experience_required")),
     location:compareLocation(profile.location,offerLocation,false,offerLocation),
