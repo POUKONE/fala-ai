@@ -56,6 +56,14 @@ function scoreLabel(score:number|null) {
   return "À examiner";
 }
 
+function readStoredIds(storage: Storage, key: string) {
+  try { const value = JSON.parse(storage.getItem(key) ?? "[]"); return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; } catch { return []; }
+}
+
+function writeStoredIds(storage: Storage, key: string, ids: string[]) {
+  try { storage.setItem(key, JSON.stringify(ids.slice(-200))); } catch { /* le serveur reste la source de vérité */ }
+}
+
 type InterviewQuestion = { label:string; prompt:string; hint:string };
 function interviewQuestions(application:Application):InterviewQuestion[] {
   const role = application.role || "ce poste";
@@ -529,19 +537,19 @@ export default function Home() {
     const data = await response.json() as {enabled?:boolean; reminders?:NotificationReminder[]};
     setNotificationsEnabled(Boolean(data.enabled));
     const readStorageKey = `fala-read-notifications-${currentUser?.email ?? "user"}`;
-    const readIds = new Set(JSON.parse(window.localStorage.getItem(readStorageKey) ?? "[]") as string[]);
+    const readIds = new Set(readStoredIds(window.localStorage, readStorageKey));
     const next = (data.reminders ?? []).map((item)=>({ ...item, read: Boolean(item.read) || Boolean(item.notification_id && readIds.has(item.notification_id)) }));
     setNotificationReminders(next);
     if (!showBrowserAlerts || !data.enabled || !("Notification" in window) || Notification.permission !== "granted") return;
     const storageKey = `fala-notified-${currentUser?.email ?? "user"}`;
-    const already = new Set(JSON.parse(window.sessionStorage.getItem(storageKey) ?? "[]") as string[]);
+    const already = new Set(readStoredIds(window.sessionStorage, storageKey));
     next.filter((item) => !item.read && new Date(item.date).getTime() <= Date.now() + 24 * 60 * 60 * 1000).forEach((item) => {
       const key = `${item.notification_id ?? item.id}-${item.type}-${item.date}`;
       if (already.has(key)) return;
       new Notification(`Fala AI · ${item.type}`, { body:`${item.role} chez ${item.company} — ${formatDate(item.date)}` });
       already.add(key);
     });
-    window.sessionStorage.setItem(storageKey, JSON.stringify([...already].slice(-50)));
+    writeStoredIds(window.sessionStorage, storageKey, [...already].slice(-50));
   }
 
   async function markNotificationRead(item:NotificationReminder) {
@@ -551,9 +559,9 @@ export default function Home() {
     const result = await response.json().catch(()=>({read:false})) as {read?:boolean};
     if (result.read === true) {
       const key = `fala-read-notifications-${currentUser?.email ?? "user"}`;
-      const ids = new Set(JSON.parse(window.localStorage.getItem(key) ?? "[]") as string[]);
+      const ids = new Set(readStoredIds(window.localStorage, key));
       ids.add(item.notification_id);
-      window.localStorage.setItem(key, JSON.stringify([...ids].slice(-200)));
+      writeStoredIds(window.localStorage, key, [...ids]);
     }
     if (!response.ok || result.read !== true) {
       await syncNotifications(false);
