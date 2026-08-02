@@ -21,7 +21,39 @@ function normalize(value:unknown){return String(value??"").trim().toLowerCase().
 function tokens(value:unknown){return normalize(value).split(/[,;/|]+/).map((item)=>item.trim()).filter(Boolean);}
 function valueFrom(body:ApplicationInput,camel:string,snake:string){return body[camel]??body[snake]??"";}
 function overlapRatio(wanted:unknown,available:unknown){const expected=tokens(wanted),actual=tokens(available);if(!expected.length||!actual.length)return expected.length?0:1;return expected.filter((item)=>actual.some((candidate)=>candidate===item||candidate.includes(item)||item.includes(candidate))).length/expected.length;}
-function titleScore(profile:string,offer:string){if(!profile||!offer)return 1;const a=new Set(tokens(profile.replace(/[\-_/]/g," "))),b=tokens(offer.replace(/[\-_/]/g," "));if(!a.size||!b.length)return 1;return b.filter((item)=>[...a].some((candidate)=>candidate.includes(item)||item.includes(candidate))).length/b.length;}
+const ROLE_ALIASES:Record<string,string> = {
+  developpeur:"developer", developpeuse:"developer", developer:"developer", programmeur:"developer", programmatrice:"developer",
+  ingenieur:"engineer", ingenieure:"engineer", engineer:"engineer", logiciel:"software", software:"software",
+  analyste:"analyst", analyst:"analyst", data:"data", donnees:"data", business:"business", metier:"business",
+  scientifique:"scientist", scientist:"scientist", frontend:"frontend", front:"frontend", backend:"backend", back:"backend",
+  fullstack:"fullstack", web:"web", cybersécurité:"cybersecurity", cybersecurite:"cybersecurity",
+  securite:"cybersecurity", devops:"devops", cloud:"cloud", machine:"machine-learning", learning:"machine-learning",
+  intelligence:"ai", artificielle:"ai", ai:"ai", ia:"ai", reseau:"network", réseaux:"network", systeme:"systems", systemes:"systems",
+  administrateur:"administrator", administratrice:"administrator", consultant:"consultant", consultante:"consultant",
+};
+const ROLE_FAMILIES = [
+  ["developer","engineer","software","fullstack","frontend","backend","web"],
+  ["data","analyst","scientist","machine-learning","ai"],
+  ["cybersecurity","network","systems","devops","cloud","administrator"],
+  ["business","analyst","consultant"],
+];
+const ROLE_STOP_WORDS = new Set(["senior","junior","lead","principal","alternance","stage","freelance","h/f","f/h","the","and","en","de","du","des"]);
+function roleTokens(value:string){
+  return normalize(value).replace(/[\-_/(),.:+]/g," ").split(/\s+/).map((item)=>ROLE_ALIASES[item]??item).filter((item)=>item&&!ROLE_STOP_WORDS.has(item));
+}
+function titleScore(profile:string,offer:string){
+  if(!profile||!offer)return 1;
+  const candidate=roleTokens(profile), required=roleTokens(offer);
+  if(!candidate.length||!required.length)return 1;
+  if(candidate.join(" ")===required.join(" "))return 1;
+  const matched=required.filter((item)=>candidate.some((value)=>value===item||value.includes(item)||item.includes(value))).length;
+  const lexical=matched/required.length;
+  const familyMatch=ROLE_FAMILIES.some((family)=>family.some((term)=>candidate.includes(term))&&family.some((term)=>required.includes(term)));
+  // Une famille métier commune signale une proximité sémantique, même sans
+  // mot identique (ex. « développeur logiciel » / « software engineer »).
+  if(familyMatch)return Math.max(lexical,0.8);
+  return lexical;
+}
 function educationRank(value:unknown){const text=normalize(value);if(!text)return -1;if(text.includes("doctorat"))return 8;if(text==="bac")return 0;const match=text.match(/bac\s*\+\s*(\d+)/);return match?Math.min(8,Number(match[1])):-1;}
 function experienceRank(value:unknown){const text=String(value??"").trim();if(text in EXPERIENCE_RANK)return EXPERIENCE_RANK[text];const match=text.match(/(\d+)/);return match?Number(match[1])>=5?3:Number(match[1])>=3?2:Number(match[1])>=1?1:0:-1;}
 function compareExperience(profile:unknown,required:unknown){const needed=experienceRank(required),available=experienceRank(profile);return needed<0||available<0?1:available>=needed?1:0.6;}
