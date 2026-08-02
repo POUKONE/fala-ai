@@ -659,7 +659,7 @@ export default function Home() {
   const notificationWindow = (date:string|null) => { if (!date) return false; const timestamp = new Date(date).getTime(); return Number.isFinite(timestamp) && timestamp >= Date.now() - 86400000 && timestamp <= Date.now() + 7 * 86400000; };
   const fallbackReminders = reminders.filter((item)=>notificationWindow(item.date)).map((item)=>({id:item.application.id,notification_id:`${item.application.id}:${item.type==="Entretien"?"interview":"next-action"}`,type:item.type,date:item.date!,company:item.application.company,role:item.application.role,status:item.application.status,read:false}));
   const unreadReminderCount = notificationReminders.filter((item)=>!item.read).length;
-  const interviewTarget = useMemo(()=>selected?.status==="Entretien" ? selected : applications.find((application)=>application.status==="Entretien") ?? applications[0] ?? null,[applications,selected]);
+  const interviewTarget = useMemo(()=>selected?.status==="Entretien" ? selected : applications.find((application)=>application.status==="Entretien") ?? null,[applications,selected]);
 
   async function acceptConsent(){setSaving(true);const response=await csrfFetch("/api/consent",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({accepted:true})});setSaving(false);if(!response.ok){const body=await response.json();setError(body.error??"Consentement impossible");return;}setConsentRequired(false);void loadData();}
 
