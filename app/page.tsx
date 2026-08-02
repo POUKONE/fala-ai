@@ -67,13 +67,23 @@ function writeStoredIds(storage: Storage, key: string, ids: string[]) {
 type InterviewQuestion = { label:string; prompt:string; hint:string };
 function interviewQuestions(application:Application):InterviewQuestion[] {
   const role = application.role || "ce poste";
-  const skills = application.required_skills ? application.required_skills.split(/[,;\n]+/).map((item)=>item.trim()).filter(Boolean).slice(0,3).join(", ") : "vos compétences clés";
-  return [
-    {label:"Présentation",prompt:`Présentez-vous en 60 secondes et expliquez pourquoi votre parcours correspond au poste de ${role}.`,hint:"Structurez votre réponse : parcours → expertise → lien avec le poste."},
-    {label:"Motivation",prompt:`Pourquoi souhaitez-vous rejoindre ${application.company} sur ce poste ?`,hint:"Citez un élément précis de l’entreprise ou de l’offre, puis reliez-le à votre objectif."},
-    {label:"Compétences",prompt:`Donnez un exemple concret où vous avez utilisé ${skills}.`,hint:"Utilisez STAR : situation, tâche, action, résultat. Ajoutez un chiffre si possible."},
-    {label:"Situation",prompt:"Parlez d’une difficulté professionnelle que vous avez résolue et de ce que vous en avez appris.",hint:"Restez factuel, expliquez votre décision et terminez par l’impact obtenu."},
+  const skills = application.required_skills ? application.required_skills.split(/[,;\n]+/).map((item)=>item.trim()).filter(Boolean).slice(0,4).join(", ") : "vos compétences clés";
+  const technical = /tech|data|ia|informat|dévelop|engineer|software|cyber|cloud|devops|sql|analyst|scient/i.test(`${application.role} ${application.sector} ${application.required_skills}`);
+  const questions:InterviewQuestion[] = [
+    {label:"Pitch · 60 secondes",prompt:`Présentez-vous en 60 secondes et expliquez pourquoi votre parcours correspond au poste de ${role}.`,hint:"PREP : Point de départ clair → raisons → exemple de preuve → lien avec le poste. Respirez, regardez la caméra ou le recruteur, puis concluez."},
+    {label:"Motivation",prompt:`Pourquoi souhaitez-vous rejoindre ${application.company} sur ce poste ?`,hint:"Citez un élément concret de l’offre, reliez-le à votre expérience réelle et terminez par la valeur que vous voulez apporter."},
+    {label:"Réussite · STAR",prompt:`Racontez une réalisation dont vous êtes fier et qui démontre ${skills}.`,hint:"STAR : Situation, Tâche, Actions (au ‘je’), Résultat. Ajoutez une métrique seulement si elle figure dans votre parcours."},
+    {label:"Difficulté · apprentissage",prompt:"Parlez d’une difficulté professionnelle que vous avez résolue et de ce que vous en avez appris.",hint:"Ne cherchez pas la réponse parfaite : expliquez le contexte, votre décision, l’impact et ce que vous feriez encore mieux."},
+    {label:"Collaboration",prompt:"Donnez un exemple de désaccord ou de collaboration difficile avec un collègue, un client ou une équipe.",hint:"Montrez l’écoute, les faits, la décision partagée et le résultat. Ne critiquez jamais une personne."},
   ];
+  if (technical) {
+    questions.push(
+      {label:"Technique · cadrage",prompt:`Comment aborderiez-vous un problème technique lié au poste de ${role} avant d’écrire la première ligne de solution ?`,hint:"Clarifiez le besoin et les contraintes, annoncez vos hypothèses, proposez une approche simple puis vérifiez-la avec des tests."},
+      {label:"Technique · arbitrage",prompt:"Présentez un choix technique que vous avez fait (ou que vous feriez) et expliquez les compromis.",hint:"Comparez au moins deux options avec des critères explicites : fiabilité, coût, délai, sécurité, maintenabilité et impact utilisateur."},
+    );
+  }
+  questions.push({label:"Clôture",prompt:"Quelles questions pertinentes souhaitez-vous poser au recruteur et quelle prochaine étape proposez-vous ?",hint:"Préparez 2 questions : priorités des 90 premiers jours, critères de réussite et suite du processus. Terminez par un remerciement précis."});
+  return questions;
 }
 
 function escapePdf(value:string) { return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replaceAll("œ","oe").replaceAll("Œ","OE").replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)"); }
@@ -453,11 +463,19 @@ export default function Home() {
   function evaluateInterviewAnswer() {
     if (!interviewPrep) return;
     const answer = prepAnswer.trim();
-    if (answer.length < 40) { setPrepFeedback("Votre réponse est encore trop courte. Ajoutez le contexte, votre action et le résultat obtenu."); return; }
-    const hasStructure = /situation|contexte|t[aâ]che|action|r[eé]sultat|impact|chiffre|%|€/.test(answer.toLowerCase());
-    setPrepFeedback(hasStructure
-      ? "Bonne base : votre réponse contient des éléments concrets. À l’oral, commencez par l’idée principale et terminez par le résultat."
-      : "Réponse claire, mais rendez-la plus convaincante avec la méthode STAR et un résultat mesurable.");
+    if (answer.length < 40) { setPrepFeedback("Réponse trop courte : visez 60 à 120 secondes. Ajoutez le contexte, votre action et le résultat obtenu."); return; }
+    const normalized = answer.toLowerCase();
+    const signals = {
+      context: /situation|contexte|chez|lorsque|projet|équipe/.test(normalized),
+      action: /j'ai|j’ai|nous avons|mis en place|conçu|analysé|piloté|décidé|résolu/.test(normalized),
+      result: /résultat|impact|amélior|réduit|augment|livr|chiffre|%|€|jours|mois/.test(normalized),
+      roleLink: new RegExp((interviewPrep.role || "poste").split(/\s+/).filter((word)=>word.length>3).slice(0,2).map((word)=>word.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")).join("|"),"i").test(answer),
+    };
+    const score = Object.values(signals).filter(Boolean).length;
+    const missing = [!signals.context&&"un contexte précis",!signals.action&&"vos actions au ‘je’",!signals.result&&"un résultat ou un apprentissage",!signals.roleLink&&"le lien avec le poste"].filter(Boolean);
+    setPrepFeedback(score >= 3
+      ? `Bonne base (${score}/4) : votre réponse est structurée. À l’oral, annoncez d’abord l’idée principale, gardez les détails utiles et terminez par l’impact pour ${interviewPrep.company}.`
+      : `À renforcer (${score}/4) : ajoutez ${missing.join(", ")}. Utilisez STAR pour une expérience et PREP pour une réponse courte, sans inventer de faits.`);
   }
 
   function nextInterviewQuestion() {
