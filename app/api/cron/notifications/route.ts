@@ -1,5 +1,6 @@
 import { getPostgresDb } from "../../../../db/postgres";
 import { sendTransactionalMail } from "../../../../db/mailer";
+import { interviewEmail } from "../../../../db/email-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +37,7 @@ export async function GET(request: Request) {
   let sent = 0;
   for (const item of due.results) {
     const date = new Intl.DateTimeFormat("fr-FR", { dateStyle: "full", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(String(item.due_at)));
-    const result = await sendTransactionalMail({
-      to: String(item.user_email),
-      subject: `Fala AI — ${String(item.type)} : ${String(item.role)}`,
-      text: `Bonjour ${String(item.display_name || "")},\n\nVotre rappel Fala AI est arrivé : ${String(item.type).toLowerCase()} pour ${String(item.role)} chez ${String(item.company)} (${date}).\n\nConnectez-vous à votre espace Fala AI pour consulter la candidature et préparer votre prochaine action.`,
-      html: `<p>Bonjour ${String(item.display_name || "")},</p><p>Votre rappel Fala AI est arrivé : <strong>${String(item.type).toLowerCase()}</strong> pour <strong>${String(item.role)}</strong> chez <strong>${String(item.company)}</strong>.</p><p>Date : ${date}</p><p>Connectez-vous à votre espace Fala AI pour consulter la candidature et préparer votre prochaine action.</p>`,
-    });
+    const result = await sendTransactionalMail({ to: String(item.user_email), ...interviewEmail(String(item.display_name || ""), String(item.role), String(item.company), date) });
     if (result.sent) {
       await db.prepare("UPDATE notification_events SET email_sent_at=? WHERE id=? AND email_sent_at IS NULL")
         .bind(new Date().toISOString(), item.id).run();
