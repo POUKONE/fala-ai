@@ -17,6 +17,8 @@ test("les notifications sont strictement isolées par utilisateur", async () => 
     /UPDATE notification_events SET read_at=\? WHERE id=\? AND user_email=\? AND read_at IS NULL/i,
     "marquer une notification comme lue doit vérifier son propriétaire",
   );
+  assert.match(route, /SELECT read_at FROM notification_events WHERE id=\? AND user_email=\?/i);
+  assert.match(route, /\(read_at IS NOT NULL\) AS read/i);
   assert.doesNotMatch(route, /body\.(?:email|userEmail)/i);
   assert.match(migration, /user_email text not null references public\.users\(email\) on delete cascade/i);
   assert.match(migration, /notification_events_user_due_idx/i);

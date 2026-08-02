@@ -57,11 +57,11 @@ export async function GET() {
         .bind(`${id}:follow-up`, ...common.slice(0,1), row.id, "Relance après entretien", new Date(interviewTime + 3 * 86400000).toISOString(), ...common.slice(2)).run();
     }
   }
-  const eventRows = await db.prepare(`SELECT id AS notification_id,application_id AS id,type,due_at AS date,company,role,status,read_at
+  const eventRows = await db.prepare(`SELECT id AS notification_id,application_id AS id,type,due_at AS date,company,role,status,read_at,(read_at IS NOT NULL) AS read
     FROM notification_events WHERE user_email=? AND due_at >= (CURRENT_TIMESTAMP - INTERVAL '1 day') AND due_at <= (CURRENT_TIMESTAMP + INTERVAL '7 days')
     ORDER BY due_at ASC LIMIT 50`).bind(user.email).all();
   const now = Date.now();
-  const reminders = eventRows.results.map((item) => ({ ...item, read: Boolean(item.read_at) })).filter((item) => { const timestamp = new Date(String(item.date)).getTime(); return Number.isFinite(timestamp) && timestamp >= now - 86400000 && timestamp <= now + 7 * 86400000; });
+  const reminders = eventRows.results.map((item) => ({ ...item, read: item.read === true || item.read === "true" || Boolean(item.read_at) })).filter((item) => { const timestamp = new Date(String(item.date)).getTime(); return Number.isFinite(timestamp) && timestamp >= now - 86400000 && timestamp <= now + 7 * 86400000; });
   return Response.json({ enabled: preference?.enabled === true || preference?.enabled === "true", reminders });
 }
 
@@ -72,9 +72,11 @@ export async function POST(request: Request) {
   await ensureTable();
   const db = getPostgresDb();
   if (body.action === "read" && body.notificationId) {
-    const result = await db.prepare("UPDATE notification_events SET read_at=? WHERE id=? AND user_email=? AND read_at IS NULL RETURNING id")
+    await db.prepare("UPDATE notification_events SET read_at=? WHERE id=? AND user_email=? AND read_at IS NULL RETURNING id")
       .bind(new Date().toISOString(), body.notificationId, user.email).run();
-    return Response.json({ ok: true, read: Boolean(result.meta.changes) });
+    const saved = await db.prepare("SELECT read_at FROM notification_events WHERE id=? AND user_email=? LIMIT 1")
+      .bind(body.notificationId, user.email).first<{ read_at: string | null }>();
+    return Response.json({ ok: true, read: Boolean(saved?.read_at) });
   }
   const enabled = body.enabled === true;
   await db.prepare(`INSERT INTO notification_preferences (user_email,enabled,updated_at)
