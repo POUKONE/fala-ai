@@ -27,7 +27,7 @@ function experienceRank(value:unknown){const text=String(value??"").trim();if(te
 function compareExperience(profile:unknown,required:unknown){const needed=experienceRank(required),available=experienceRank(profile);return needed<0||available<0?1:available>=needed?1:0.6;}
 function compareEducation(profile:unknown,required:unknown){const needed=educationRank(required),available=educationRank(profile);return needed<0||available<0?1:available>=needed?1:0;}
 function compareLocation(profile:unknown,offer:unknown,relocate=false,remotePolicy:string=""){const a=normalize(profile),b=normalize(offer);if(!a||!b||remotePolicy==="full"||b.includes("remote")||b.includes("teletravail")||relocate)return 1;return a.includes(b)||b.includes(a)?1:0.35;}
-function compareContract(profile:unknown,offer:unknown){const a=normalize(profile),b=normalize(offer);return !a||!b||a===b?1:0.4;}
+function compareContract(profile:unknown,offer:unknown){const a=tokens(profile),b=tokens(offer);if(!a.length||!b.length)return 1;return a.some((candidate)=>b.some((wanted)=>candidate===wanted||candidate.includes(wanted)||wanted.includes(candidate)))?1:0.4;}
 function compareLanguages(profile:unknown,offer:unknown){return overlapRatio(profile,offer);}
 function compareSalary(candidateMin:number,offerMax:number){if(!candidateMin||!offerMax)return 1;if(candidateMin<=offerMax)return 1;const gap=(candidateMin-offerMax)/offerMax;return gap<=0.1?0.5:0.3;}
 function formatBreakdown(raw:Record<CriteriaKey,number>):Breakdown{return Object.fromEntries(Object.entries(SCORE_WEIGHTS).map(([key,weight])=>{const value=Math.max(0,Math.min(1,raw[key as CriteriaKey]??0));return [key,{rawScore:Math.round(value*100),weightedScore:Number((value*weight).toFixed(2))}];})) as Breakdown;}
