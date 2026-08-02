@@ -32,17 +32,19 @@ const languageSuggestions = ["Français","Anglais","Espagnol","Allemand","Italie
 const contractSuggestions = ["CDI","CDD","Alternance","Stage","Freelance","Intérim"];
 const locationSuggestions = ["Paris","Lyon","Marseille","Toulouse","Bordeaux","Lille","Nantes","Montpellier","Strasbourg","Nice","Rennes","Grenoble","France","Île-de-France","Télétravail","Hybride"];
 const scoreMaximums:Record<string,number> = {skills:35,title:15,experience:15,location:10,education:10,contract:5,languages:5,salary:5};
+const scoreOrder = ["skills","title","experience","location","education","contract","languages","salary"];
 const scoreNames:Record<string,string> = {skills:"Compétences",title:"Intitulé du poste",experience:"Expérience",education:"Études",location:"Localisation",contract:"Contrat",languages:"Langues",sector:"Secteur",salary:"Salaire"};
 
 function parseScoreBreakdown(value:unknown):Record<string,number>|null {
   if (!value) return null;
   const parsed = typeof value === "string" ? (() => { try { return JSON.parse(value) as unknown; } catch { return null; } })() : value;
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
-  return Object.fromEntries(Object.entries(parsed).flatMap(([key,item]) => {
+  const values = Object.fromEntries(Object.entries(parsed).flatMap(([key,item]) => {
     if(typeof item === "number") return [[key,item]];
     if(item && typeof item === "object" && !Array.isArray(item) && typeof (item as {weightedScore?:unknown}).weightedScore === "number") return [[key,(item as {weightedScore:number}).weightedScore]];
     return [];
   })) as Record<string,number>;
+  return Object.fromEntries([...scoreOrder.filter((key)=>key in values), ...Object.keys(values).filter((key)=>!scoreOrder.includes(key))].map((key)=>[key,values[key]])) as Record<string,number>;
 }
 
 function formatDate(value:string|null) {
