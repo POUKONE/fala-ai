@@ -330,6 +330,9 @@ button, input, select, textarea { max-width:100%; }
 }
 
 @media (max-width:720px) {
+  html { -webkit-text-size-adjust:100%; }
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size:16px !important; }
+  .modal-backdrop { overscroll-behavior:contain; }
   .topbar { min-height:62px; }
   .brand { flex-shrink:0; }
   .top-actions { min-width:0; flex-wrap:wrap; }
@@ -389,3 +392,8 @@ button, input, select, textarea { max-width:100%; }
 .auth-footer span:last-child { display:flex; gap:14px; }
 .auth-footer a { color:#aaa2b7; text-decoration:none; }
 .auth-footer a:hover { color:white; }
+
+/* iOS Safari zooms focused text fields below 16px. Keep the auth surface stable on phones. */
+@media (max-width:720px) {
+  .auth-card input:not([type="checkbox"]):not([type="radio"]) { font-size:16px !important; }
+}
